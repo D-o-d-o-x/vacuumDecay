@@ -2,24 +2,23 @@ from vacuumDecay import *
 import numpy as np
 
 class TTTState(State):
-    def __init__(self, turn=0, generation=0, playersNum=2, board=None):
+    def __init__(self, curPlayer=0, generation=0, playersNum=2, board=None):
         if type(board) == type(None):
             board = np.array([None]*9)
-        self.turn = turn
+        self.curPlayer = curPlayer
         self.generation = generation
         self.playersNum = playersNum
         self.board = board
-        self.score = self.getScore()
 
     def mutate(self, action):
         newBoard = np.copy(self.board)
-        newBoard[action.data] = self.turn
-        return TTTState(turn=(self.turn+1)%self.playersNum, playersNum=self.playersNum, board=newBoard)
+        newBoard[action.data] = self.curPlayer
+        return TTTState(curPlayer=(self.curPlayer+1)%self.playersNum, playersNum=self.playersNum, board=newBoard)
 
     def getAvaibleActions(self):
         for i in range(9):
             if self.board[i]==None:
-                yield Action(self.turn, i)
+                yield Action(self.curPlayer, i)
 
     def checkWin(self):
         s = self.board
@@ -49,13 +48,13 @@ class TTTState(State):
     @classmethod
     def getModel():
         return torch.nn.Sequential(
-            torch.nn.Linear(10, 10)
-            torch.nn.ReLu()
-            torch.nn.Linear(10, 3)
-            torch.nn.Sigmoid()
+            torch.nn.Linear(10, 10),
+            torch.nn.ReLu(),
+            torch.nn.Linear(10, 3),
+            torch.nn.Sigmoid(),
             torch.nn.Linear(3,1)
         )
 
 if __name__=="__main__":
-    vd = VacuumDecay(TTTState())
-    vd.weakPlay()
+    run = Runtime(TTTState())
+    run.game()
