@@ -7,7 +7,8 @@ from math import sqrt, inf
 from abc import ABC, abstractmethod
 from threading import Event
 from queue import PriorityQueue, Empty
-
+from dataclasses import dataclass, field
+from typing import Any
 
 class Action():
     # Should hold the data representing an action
@@ -28,60 +29,6 @@ class Action():
         # should return visual representation of this action
         # should start with < and end with >
         return "<P"+str(self.player)+"-"+str(self.data)+">"
-
-class Universe():
-    def __init__(self):
-        self.scoreProvider = 'naive'
-
-    def newOpen(self, node):
-        pass
-
-    def merge(self, node):
-        return node
-
-    def clearPQ(self):
-        pass
-
-    def iter(self):
-        return []
-
-    def activateEdge(self, head):
-        pass
-
-from dataclasses import dataclass, field
-from typing import Any
-
-@dataclass(order=True)
-class PQItem:
-    priority: int
-    data: Any=field(compare=False)
-
-class QueueingUniverse(Universe):
-    def __init__(self):
-        super().__init__()
-        self.pq = PriorityQueue()
-
-    def newOpen(self, node):
-       item = PQItem(node.getPriority(), node)
-       self.pq.put(item)
-
-    def merge(self, node):
-        self.newOpen(node)
-        return node
-
-    def clearPQ(self):
-        self.pq = PriorityQueue()
-
-    def iter(self):
-        while True:
-            try:
-                yield self.pq.get(False).data
-            except Empty:
-                time.sleep(1)
-
-    def activateEdge(self, head):
-        head._activateEdge()
-
 
 class State(ABC):
     # Hold a representation of the current game-state
@@ -105,7 +52,7 @@ class State(ABC):
     @abstractmethod
     def getAvaibleActions(self):
         # Should return an array of all possible actions
-        return [i]
+        return []
 
     def askUserForAction(self, actions):
         return choose('What does player '+str(self.curPlayer)+' want to do?', actions)
@@ -153,6 +100,56 @@ class State(ABC):
 
     def getScoreNeural(self):
         return self.model(self.getTensor())
+
+class Universe():
+    def __init__(self):
+        self.scoreProvider = 'naive'
+
+    def newOpen(self, node):
+        pass
+
+    def merge(self, node):
+        return node
+
+    def clearPQ(self):
+        pass
+
+    def iter(self):
+        return []
+
+    def activateEdge(self, head):
+        pass
+
+@dataclass(order=True)
+class PQItem:
+    priority: int
+    data: Any=field(compare=False)
+
+class QueueingUniverse(Universe):
+    def __init__(self):
+        super().__init__()
+        self.pq = PriorityQueue()
+
+    def newOpen(self, node):
+       item = PQItem(node.getPriority(), node)
+       self.pq.put(item)
+
+    def merge(self, node):
+        self.newOpen(node)
+        return node
+
+    def clearPQ(self):
+        self.pq = PriorityQueue()
+
+    def iter(self):
+        while True:
+            try:
+                yield self.pq.get(False).data
+            except Empty:
+                time.sleep(1)
+
+    def activateEdge(self, head):
+        head._activateEdge()
 
 
 class Node():
@@ -372,21 +369,6 @@ class Worker():
     def revive(self):
         self._alive = True
 
-class Trainer():
-    def __init__(self):
-        pass
-
-    def spawnRuntime(self, initState):
-        self._runtime = Runtime(initState)
-
-    def setRuntime(self, runtime):
-        self._runtime = runtime
-
-    def playFrom(self, start=None):
-        if start==None:
-            start = self._runtime.head
-        self._runtime.game([1]*self._runtime.head.playersNum)
-
 class Runtime():
     def __init__(self, initState):
         universe = QueueingUniverse()
@@ -445,3 +427,23 @@ class Runtime():
             self.turn(bots[self.head.curPlayer], calcDepth)
         print(self.head.getWinner() + ' won!')
         self.killWorker()
+
+class Trainer(Runtime):
+    def __init__(self, initState):
+        self.universe = Universe()
+        self.rootNode = Node(initState, universe = self.universe)
+        self.terminal = None
+
+    def linearPlay(self, calcDepth=8):
+        head = rootNode
+        while head.getWinner()==None:
+            self.head.forceStrong(calcDepth)
+            opts = []
+            for c in self.head.childs:
+                opts.append((c, c.getStrongFor(self.head.curPlayer)))
+            opts.sort(key=lambda x: x[1])
+            ind = int(math.pow(random.random(),5)*len(opts))
+            head = opts[ind][0]
+        self.terminal = head
+        return head
+

@@ -1,3 +1,7 @@
+"""
+A lot of this code was stolen from Pulkit Maloo (https://github.com/pulkitmaloo/Ultimate-Tic-Tac-Toe)
+"""
+
 from vacuumDecay import *
 from collections import Counter
 import itertools
