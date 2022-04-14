@@ -30,6 +30,9 @@ class Action():
         return "<P"+str(self.player)+"-"+str(self.data)+">"
 
 class Universe():
+    def __init__(self):
+        self.scoreProvider = 'naive'
+
     def newOpen(self, node):
         pass
 
@@ -45,18 +48,36 @@ class Universe():
     def activateEdge(self, head):
         pass
 
+from dataclasses import dataclass, field
+from typing import Any
+
+@dataclass(order=True)
+class PQItem:
+    priority: int
+    data: Any=field(compare=False)
+
 class QueueingUniverse(Universe):
     def __init__(self):
-        self.pq = []
+        super().__init__()
+        self.pq = PriorityQueue()
 
     def newOpen(self, node):
-        heapq.headpush(self.pq, (node.priority, node))
+       item = PQItem(node.getPriority(), node)
+       self.pq.put(item)
+
+    def merge(self, node):
+        self.newOpen(node)
+        return node
 
     def clearPQ(self):
-        self.pq = []
+        self.pq = PriorityQueue()
 
     def iter(self):
-        yield heapq.heappop(self.pq)
+        while True:
+            try:
+                yield self.pq.get(False).data
+            except Empty:
+                time.sleep(1)
 
     def activateEdge(self, head):
         head._activateEdge()
@@ -90,7 +111,7 @@ class State(ABC):
         return choose('What does player '+str(self.curPlayer)+' want to do?', actions)
 
     # improveMe
-    def getPriority(self, score, cascadeMemory=None):
+    def getPriority(self, score, cascadeMemory):
         # Used for ordering the priority queue
         # Priority should not change for the same root
         # Lower prioritys get worked on first
@@ -138,6 +159,7 @@ class Node():
     def __init__(self, state, universe=None, parent=None, lastAction=None):
         self.state = state
         if universe==None:
+            print('[!] No Universe defined. Spawning one...')
             universe = Universe()
         self.universe = universe
         self.parent = parent
@@ -216,12 +238,18 @@ class Node():
             else:
                 self.strongDecay()
 
+    def decayEvent(self):
+        for c in self.childs:
+            c.strongDecay()
+
     def strongDecay(self):
         if self._strongs == [None]*self.playersNum:
             if not self.scoresAvaible():
                 self._calcScores()
             self._strongs = self._scores
-            return self.parent._pullStrong()
+            if self.parent:
+                return self.parent._pullStrong()
+            return 1
         return None
 
     def getSelfScore(self):
@@ -247,16 +275,21 @@ class Node():
                 return False
         return True
 
+    def askUserForAction(self):
+        return self.state.askUserForAction(self.avaibleActions)
+
     def _calcScores(self):
         for p in range(self.state.playersNum):
             self._calcScore(p)
 
     def _calcScore(self, player):
-        self._scores[player] = self.state.getScoreFor(player)
+        if self.universe.scoreProvider == 'naive':
+            self._scores[player] = self.state.getScoreFor(player)
+        else:
+            raise Exception('Uknown Score-Provider')
 
-    @property
-    def priority(self):
-        return self.state.getPriority(self.score)
+    def getPriority(self):
+        return self.state.getPriority(self.getSelfScore(), self._cascadeMemory)
 
     @property
     def playersNum(self):
@@ -273,12 +306,16 @@ class Node():
     def curPlayer(self):
         return self.state.curPlayer
 
+    def getWinner(self):
+        return self.state.checkWin()
+
     def _activateEdge(self):
         if not self.strongScoresAvaible():
             self.universe.newOpen(self)
         else:
             for c in self.childs:
-                c._activateEdge()
+                if c._cascadeMemory > 0.0001:
+                    c._activateEdge()
 
     def __str__(self):
         s = []
@@ -312,10 +349,56 @@ def choose(txt, options):
                     return opt
         print('[!] Invalid Input.')
 
+class Worker():
+    def __init__(self, universe):
+        self.universe = universe
+        self._alive = True
+
+    def run(self):
+        import threading
+        self.thread = threading.Thread(target=self.runLocal)
+        self.thread.start()
+
+    def runLocal(self):
+        for i, node in enumerate(self.universe.iter()):
+            if not self._alive:
+                return
+            node.decayEvent()
+
+    def kill(self):
+        self._alive = False
+        self.thread.join()
+
+    def revive(self):
+        self._alive = True
+
+class Trainer():
+    def __init__(self):
+        pass
+
+    def spawnRuntime(self, initState):
+        self._runtime = Runtime(initState)
+
+    def setRuntime(self, runtime):
+        self._runtime = runtime
+
+    def playFrom(self, start=None):
+        if start==None:
+            start = self._runtime.head
+        self._runtime.game([1]*self._runtime.head.playersNum)
+
 class Runtime():
     def __init__(self, initState):
-        universe = Universe()
-        self.head = Node(initState,universe = universe)
+        universe = QueueingUniverse()
+        self.head = Node(initState, universe = universe)
+        universe.newOpen(self.head)
+
+    def spawnWorker(self):
+        self.worker = Worker(self.head.universe)
+        self.worker.run()
+
+    def killWorker(self):
+        self.worker.kill()
 
     def performAction(self, action):
         for c in self.head.childs:
@@ -330,9 +413,12 @@ class Runtime():
     def turn(self, bot=None, calcDepth=7):
         print(str(self.head))
         if bot==None:
-            c = choose('Select action?', ['human', 'bot', 'undo'])
+            c = choose('Select action?', ['human', 'bot', 'undo', 'qlen'])
             if c=='undo':
                 self.head = self.head.parent
+                return
+            elif c=='qlen':
+                print(self.head.universe.pq.qsize())
                 return
             bot = c=='bot'
         if bot:
@@ -348,11 +434,14 @@ class Runtime():
             print('[#] I choose to play: ' + str(opts[0][0].lastAction))
             self.performAction(opts[0][0].lastAction)
         else:
-            action = self.head.askUserForAction(self.head.avaibleActions)
+            action = self.head.askUserForAction()
             self.performAction(action)
 
     def game(self, bots=None, calcDepth=7):
+        self.spawnWorker()
         if bots==None:
             bots = [None]*self.head.playersNum
-        while True:
+        while self.head.getWinner()==None:
             self.turn(bots[self.head.curPlayer], calcDepth)
+        print(self.head.getWinner() + ' won!')
+        self.killWorker()

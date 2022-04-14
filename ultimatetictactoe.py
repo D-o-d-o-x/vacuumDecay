@@ -72,15 +72,18 @@ class TTTState(State):
             if self.board[ind]=='.':
                 yield Action(self.curPlayer, ind)
 
-    def getScoreFor(self, player):
-        p = ['O','X'][player]
-        sco = 5
-        for w in self.box_won:
-            if w==p:
-                sco += 1
-            elif w!='.':
-                sco -= 0.5
-        return 1/sco
+    #def getScoreFor(self, player):
+    #    p = ['O','X'][player]
+    #    sco = 5
+    #    for w in self.box_won:
+    #        if w==p:
+    #            sco += 1
+    #        elif w!='.':
+    #            sco -= 0.5
+    #    return 1/sco
+
+    def getPriority(self, score, cascadeMem):
+        return self.generation + score*10 - cascadeMem*5 + 100
 
     def checkWin(self):
         self.update_box_won()
@@ -117,4 +120,4 @@ class TTTState(State):
 
 if __name__=="__main__":
     run = Runtime(TTTState())
-    run.game(None, 4)
+    run.game([0,1], 4)
