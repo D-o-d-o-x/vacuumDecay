@@ -2,7 +2,7 @@ import time
 import random
 import threading
 import torch
-from math import sqrt
+from math import sqrt, inf
 #from multiprocessing import Event
 from abc import ABC, abstractmethod
 from threading import Event
@@ -84,7 +84,10 @@ class State(ABC):
     @abstractmethod
     def getAvaibleActions(self):
         # Should return an array of all possible actions
-        return []
+        return [i]
+
+    def askUserForAction(self, actions):
+        return choose('What does player '+str(self.curPlayer)+' want to do?', actions)
 
     # improveMe
     def getPriority(self, score, cascadeMemory=None):
@@ -176,7 +179,7 @@ class Node():
         for p in range(self.playersNum):
             cp = self.state.curPlayer
             if cp == p: # P owns the turn; controlls outcome
-                best = 1000000000
+                best = inf
                 for c in self.childs:
                     if c.getStrongFor(p) < best:
                         best = c.getStrongFor(p)
@@ -311,7 +314,8 @@ def choose(txt, options):
 
 class Runtime():
     def __init__(self, initState):
-        self.head = Node(initState)
+        universe = Universe()
+        self.head = Node(initState,universe = universe)
 
     def performAction(self, action):
         for c in self.head.childs:
@@ -323,16 +327,16 @@ class Runtime():
                 return
         raise Exception('No such action avaible...')
 
-    def turn(self, bot=None):
+    def turn(self, bot=None, calcDepth=7):
         print(str(self.head))
         if bot==None:
-            c = choose('?', ['human', 'bot', 'undo'])
+            c = choose('Select action?', ['human', 'bot', 'undo'])
             if c=='undo':
                 self.head = self.head.parent
                 return
             bot = c=='bot'
         if bot:
-            self.head.forceStrong(7)
+            self.head.forceStrong(calcDepth)
             opts = []
             for c in self.head.childs:
                 opts.append((c, c.getStrongFor(self.head.curPlayer)))
@@ -344,11 +348,11 @@ class Runtime():
             print('[#] I choose to play: ' + str(opts[0][0].lastAction))
             self.performAction(opts[0][0].lastAction)
         else:
-            action = choose('What does player '+str(self.head.curPlayer)+' want to do?', self.head.avaibleActions)
+            action = self.head.askUserForAction(self.head.avaibleActions)
             self.performAction(action)
 
-    def game(self, bots=None):
+    def game(self, bots=None, calcDepth=7):
         if bots==None:
             bots = [None]*self.head.playersNum
         while True:
-            self.turn(bots[self.head.curPlayer])
+            self.turn(bots[self.head.curPlayer], calcDepth)
