@@ -186,6 +186,8 @@ class Node():
 
     def _expand(self):
         self._childs = []
+        if self.getWinner()!=None:
+            return
         actions = self.state.getAvaibleActions()
         for action in actions:
             newNode = Node(self.state.mutate(action), self.universe, self, action)
@@ -284,11 +286,17 @@ class Node():
             self._calcScore(p)
 
     def _calcScore(self, player):
+        winner = self.getWinner()
+        if winner!=None:
+            if winner==player:
+                self._scores[player] = 0.0
+            else:
+                self._scores[player] = 1.0
+            return
         if self.universe.scoreProvider == 'naive':
             self._scores[player] = self.state.getScoreFor(player)
         elif self.universe.scoreProvider == 'neural':
             self._scores[player] = self.state.getScoreNeural(self.universe.model, player)
-
         else:
             raise Exception('Uknown Score-Provider')
 
@@ -329,7 +337,7 @@ class Node():
             s.append("[ -> "+str(self.lastAction)+" ]")
         s.append("[ turn: "+str(self.state.curPlayer)+" ]")
         s.append(str(self.state))
-        s.append("[ score: "+str(self.getStrongFor(self.state.curPlayer))+" ]")
+        s.append("[ score: "+str(self.getScoreFor(0))+" ]")
         return '\n'.join(s)
 
 def choose(txt, options):
@@ -452,7 +460,7 @@ class Trainer(Runtime):
         self.rootNode = Node(initState, universe = self.universe)
         self.terminal = None
 
-    def buildDatasetFromModel(self, model, depth=4, refining=False):
+    def buildDatasetFromModel(self, model, depth=4, refining=True):
         print('[*] Building Timeline')
         term = self.linearPlay(model, calcDepth=depth)
         if refining:
@@ -462,8 +470,8 @@ class Trainer(Runtime):
             self.fanOut(term.parent.parent, depth=depth+1)
         return term
 
-    def fanOut(self, head, depth=10):
-        for d in range(max(3, depth-3)):
+    def fanOut(self, head, depth=4):
+        for d in range(max(1, depth-2)):
             head = head.parent
         head.forceStrong(depth)
 
@@ -499,7 +507,7 @@ class Trainer(Runtime):
         loss_func = nn.MSELoss()
         optimizer = optim.Adam(model.parameters(), lr)
         term = self.buildDatasetFromModel(model, depth=calcDepth)
-        for r in range(16):
+        for r in range(64):
             loss_sum = 0
             zeroLen = 0
             for i, node in enumerate(self.timelineIter(term)):

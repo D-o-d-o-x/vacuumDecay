@@ -127,7 +127,11 @@ class TTTState(State):
     def getTensor(self, player=None, phase='default'):
         if player==None:
             player = self.curPlayer
-        return torch.tensor([self.symbToNum(b) for b in self.board])
+        s = ''
+        for row in range(1, 10):
+            for col in range(1, 10):
+                s += self.board[self.index(row, col)]
+        return torch.tensor([self.symbToNum(b) for b in s])
 
     @classmethod
     def getModel(cls, phase='default'):
@@ -138,8 +142,7 @@ class Model(nn.Module):
         super().__init__()
 
         self.smolChan = 12
-        self.bigChan = 5
-        self.compChan = 3
+        self.compChan = 7
 
         self.smol = nn.Sequential(
             nn.Conv2d(
@@ -152,35 +155,26 @@ class Model(nn.Module):
             nn.ReLU()
         )
         self.big = nn.Sequential(
-            nn.Conv2d(
-                in_channels=self.smolChan,
-                out_channels=self.bigChan,
-                kernel_size=(3,3),
-                stride=3,
-                padding=0,
-            ),
-            nn.ReLU()
-        )
-        self.out = nn.Sequential(
-            #nn.Linear(bigChan, 1),
-            nn.Linear(self.bigChan, self.compChan),
+            nn.Linear(self.smolChan*9, self.compChan),
+            #nn.ReLU(),
+            #nn.Linear(self.compChan, 1),
             nn.ReLU(),
-            nn.Linear(self.compChan, 1),
+            nn.Linear(self.compChan, 3),
+            nn.ReLU(),
+            nn.Linear(3, 1),
             nn.Sigmoid()
         )
 
     def forward(self, x):
         x = torch.reshape(x, (1,9,9))
         x = self.smol(x)
-        x = self.big(x)
-        x = torch.reshape(x, (self.bigChan,))
-        #x = x.view(x.size(0), -1)
-        y = self.out(x)
+        x = torch.reshape(x, (self.smolChan*9,))
+        y = self.big(x)
         return y
 
 if __name__=="__main__":
     run = NeuralRuntime(TTTState())
     run.game(None, 4)
 
-    #trainer = Trainer(TTTState())
-    #trainer.train()
+    trainer = Trainer(TTTState())
+    trainer.train()
