@@ -2,7 +2,9 @@ import time
 import random
 import threading
 import torch
-from math import sqrt, inf
+import torch.nn as nn
+from torch import optim
+from math import sqrt, pow, inf
 #from multiprocessing import Event
 from abc import ABC, abstractmethod
 from threading import Event
@@ -91,15 +93,17 @@ class State(ABC):
         return "[#]"
 
     @abstractmethod
-    def getTensor(self, phase='default'):
+    def getTensor(self, player=None, phase='default'):
+        if player==None:
+            player = self.curPlayer
         return torch.tensor([0])
 
     @classmethod
-    def getModel():
+    def getModel(cls, phase='default'):
         pass
 
-    def getScoreNeural(self):
-        return self.model(self.getTensor())
+    def getScoreNeural(self, model, player=None, phase='default'):
+        return model(self.getTensor(player=player, phase=phase)).item()
 
 class Universe():
     def __init__(self):
@@ -282,6 +286,9 @@ class Node():
     def _calcScore(self, player):
         if self.universe.scoreProvider == 'naive':
             self._scores[player] = self.state.getScoreFor(player)
+        elif self.universe.scoreProvider == 'neural':
+            self._scores[player] = self.state.getScoreNeural(self.universe.model, player)
+
         else:
             raise Exception('Uknown Score-Provider')
 
@@ -322,7 +329,7 @@ class Node():
             s.append("[ -> "+str(self.lastAction)+" ]")
         s.append("[ turn: "+str(self.state.curPlayer)+" ]")
         s.append(str(self.state))
-        s.append("[ score: "+str(self.getSelfScore())+" ]")
+        s.append("[ score: "+str(self.getStrongFor(self.state.curPlayer))+" ]")
         return '\n'.join(s)
 
 def choose(txt, options):
@@ -428,22 +435,105 @@ class Runtime():
         print(self.head.getWinner() + ' won!')
         self.killWorker()
 
+class NeuralRuntime(Runtime):
+    def __init__(self, initState):
+        super().__init__(initState)
+
+        model = self.head.state.getModel()
+        model.load_state_dict(torch.load('brains/uttt.pth'))
+        model.eval()
+
+        self.head.universe.model = model
+        self.head.universe.scoreProvider = 'neural'
+
 class Trainer(Runtime):
     def __init__(self, initState):
         self.universe = Universe()
         self.rootNode = Node(initState, universe = self.universe)
         self.terminal = None
 
-    def linearPlay(self, calcDepth=8):
-        head = rootNode
+    def buildDatasetFromModel(self, model, depth=4, refining=False):
+        print('[*] Building Timeline')
+        term = self.linearPlay(model, calcDepth=depth)
+        if refining:
+            print('[*] Refining Timeline')
+            self.fanOut(term, depth=depth+1)
+            self.fanOut(term.parent, depth=depth+1)
+            self.fanOut(term.parent.parent, depth=depth+1)
+        return term
+
+    def fanOut(self, head, depth=10):
+        for d in range(max(3, depth-3)):
+            head = head.parent
+        head.forceStrong(depth)
+
+    def linearPlay(self, model, calcDepth=7, verbose=True):
+        head = self.rootNode
+        self.universe.model = model
         while head.getWinner()==None:
-            self.head.forceStrong(calcDepth)
+            if verbose:
+                print(head)
+            else:
+                print('.', end='', flush=True)
+            head.forceStrong(calcDepth)
             opts = []
-            for c in self.head.childs:
-                opts.append((c, c.getStrongFor(self.head.curPlayer)))
+            if len(head.childs)==0:
+                break
+            for c in head.childs:
+                opts.append((c, c.getStrongFor(head.curPlayer)))
             opts.sort(key=lambda x: x[1])
-            ind = int(math.pow(random.random(),5)*len(opts))
+            ind = int(pow(random.random(),5)*(len(opts)-1))
             head = opts[ind][0]
-        self.terminal = head
+        print('')
         return head
 
+    def timelineIter(self, term):
+        head = term
+        while True:
+            yield head
+            if head.parent == None:
+                return
+            head = head.parent
+
+    def trainModel(self, model, lr=0.01, cut=0.01, calcDepth=4):
+        loss_func = nn.MSELoss()
+        optimizer = optim.Adam(model.parameters(), lr)
+        term = self.buildDatasetFromModel(model, depth=calcDepth)
+        for r in range(16):
+            loss_sum = 0
+            zeroLen = 0
+            for i, node in enumerate(self.timelineIter(term)):
+                for p in range(self.rootNode.playersNum):
+                    inp = node.state.getTensor(player=p)
+                    gol = torch.tensor(node.getStrongFor(p), dtype=torch.float)
+                    out = model(inp)
+                    loss = loss_func(out, gol)
+                    optimizer.zero_grad()
+                    loss.backward()
+                    optimizer.step()
+                    loss_sum += loss.item()
+                    if loss.item() == 0.0:
+                        zeroLen+=1
+                    if zeroLen == 5:
+                        break
+            print(loss_sum/i)
+            if loss_sum/i < cut:
+                return
+
+    def main(self, model=None, gens=64):
+        newModel = False
+        if model==None:
+            newModel = True
+            model = self.rootNode.state.getModel()
+        self.universe.scoreProvider = ['neural','naive'][newModel]
+        for gen in range(gens):
+            print('[#####] Gen '+str(gen)+' training:')
+            self.trainModel(model, calcDepth=3)
+            self.universe.scoreProvider = 'neural'
+            torch.save(model.state_dict(), 'brains/uttt.pth')
+
+    def train(self):
+        model = self.rootNode.state.getModel()
+        model.load_state_dict(torch.load('brains/uttt.pth'))
+        model.eval()
+        self.main(model)
