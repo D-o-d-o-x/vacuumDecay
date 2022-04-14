@@ -2,6 +2,7 @@ import time
 import random
 import threading
 import torch
+from math import sqrt
 #from multiprocessing import Event
 from abc import ABC, abstractmethod
 from threading import Event
@@ -86,12 +87,13 @@ class State(ABC):
         return []
 
     # improveMe
-    def getPriority(self, score):
+    def getPriority(self, score, cascadeMemory=None):
         # Used for ordering the priority queue
         # Priority should not change for the same root
         # Lower prioritys get worked on first
         # Higher generations should have higher priority
-        return score + self.generation*0.5
+        # Higher cascadeMemory (more influence on higher-order-scores) should have lower priority
+        return score + self.generation*0.5 - cascadeMemory*0.35
 
     @abstractmethod
     def checkWin(self):
@@ -142,9 +144,13 @@ class Node():
         self._scores = [None]*self.state.playersNum
         self._strongs = [None]*self.state.playersNum
         self._alive = True
+        self._cascadeMemory = 0 # Used for our alternative to alpha-beta pruning
 
     def kill(self):
         self._alive = False
+
+    def revive(self):
+        self._alive = True
 
     @property
     def childs(self):
@@ -159,26 +165,28 @@ class Node():
             newNode = Node(self.state.mutate(action), self.universe, self, action)
             self._childs.append(self.universe.merge(newNode))
 
-    @property
-    def strongs(self):
-        return self._strongs
+    def getStrongFor(self, player):
+        if self._strongs[player]!=None:
+            return self._strongs[player]
+        else:
+            return self.getScoreFor(player)
 
     def _pullStrong(self): # Currently Expecti-Max
         strongs = [None]*self.playersNum
         for p in range(self.playersNum):
             cp = self.state.curPlayer
             if cp == p: # P owns the turn; controlls outcome
-                best = 10000000
+                best = 1000000000
                 for c in self.childs:
-                    if c._strongs[cp] < best:
-                        best = c._strongs[p]
+                    if c.getStrongFor(p) < best:
+                        best = c.getStrongFor(p)
                 strongs[p] = best
             else:
-                scos = [(c._strongs[cp], c._strongs[p]) for c in self.childs]
-                scos.sort(key=lambda x: x[0])
-                betterHalf = scos[:max(3,int(len(scos)/2))]
-                myScores = [bh[1] for bh in betterHalf]
-                strongs[p] = sum(myScores)/len(myScores)
+                scos = [(c.getStrongFor(p), c.getStrongFor(cp)) for c in self.childs]
+                scos.sort(key=lambda x: x[1])
+                betterHalf = scos[:max(3,int(len(scos)/3))]
+                myScores = [bh[0]**2 for bh in betterHalf]
+                strongs[p] = sqrt(myScores[0]*0.75 + sum(myScores)/(len(myScores)*4))
         update = False
         for s in range(self.playersNum):
             if strongs[s] != self._strongs[s]:
@@ -186,21 +194,32 @@ class Node():
                 break
         self._strongs = strongs
         if update:
-            self.parent._pullStrong()
+            if self.parent!=None:
+                cascade = self.parent._pullStrong()
+            else:
+                cascade = 2
+            self._cascadeMemory = self._cascadeMemory/2 + cascade
+            return cascade + 1
+        self._cascadeMemory /= 2
+        return 0
 
     def forceStrong(self, depth=3):
         if depth==0:
             self.strongDecay()
         else:
-            for c in self.childs:
-                c.forceStrong(depth-1)
+            if len(self.childs):
+                for c in self.childs:
+                    c.forceStrong(depth-1)
+            else:
+                self.strongDecay()
 
     def strongDecay(self):
         if self._strongs == [None]*self.playersNum:
             if not self.scoresAvaible():
                 self._calcScores()
             self._strongs = self._scores
-            self.parent._pullStrong()
+            return self.parent._pullStrong()
+        return None
 
     def getSelfScore(self):
         return self.getScoreFor(self.curPlayer)
@@ -215,6 +234,12 @@ class Node():
 
     def scoresAvaible(self):
         for p in self._scores:
+            if p==None:
+                return False
+        return True
+
+    def strongScoresAvaible(self):
+        for p in self._strongs:
             if p==None:
                 return False
         return True
@@ -307,9 +332,10 @@ class Runtime():
                 return
             bot = c=='bot'
         if bot:
+            self.head.forceStrong(7)
             opts = []
             for c in self.head.childs:
-                opts.append((c, c.getStrongScore(self.head.curPlayer, -1)[0]))
+                opts.append((c, c.getStrongFor(self.head.curPlayer)))
             opts.sort(key=lambda x: x[1])
             print('[i] Evaluated Options:')
             for o in opts:
