@@ -549,7 +549,10 @@ class Trainer(Runtime):
             print('[#####] Gen '+str(gen)+' training:')
             self.trainModel(model, calcDepth=min(5,3+int(gen/16)), exacity=int(gen/3+1))
             self.universe.scoreProvider = 'neural'
-            torch.save(model.state_dict(), 'brains/uttt.pth')
+            self.saveModel(model)
+
+    def saveModel(self, model):
+        torch.save(model.state_dict(), 'brains/uttt.pth')
 
     def train(self):
         model = self.rootNode.state.getModel()
@@ -563,6 +566,7 @@ class Trainer(Runtime):
         model.eval()
         self.universe.scoreProvider = 'neural'
         self.trainModel(model, calcDepth=4, exacity=10, term=term)
+        self.saveModel(model)
 
     def saveToMemoryBank(self, term):
         with open('memoryBank/uttt/'+datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')+'_'+str(int(random.random()*99999))+'.vdm', 'wb') as f:

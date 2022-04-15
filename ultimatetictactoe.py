@@ -179,18 +179,29 @@ class Model(nn.Module):
         y = self.out(x)
         return y
 
-if __name__=="__main__":
+def humanVsAi(train=True, remember=True):
     init = TTTState()
     run = NeuralRuntime(init)
     run.game([0,1], 4)
 
-
-    print("[!] Your knowledge will be assimilated!!! Please stand by....")
-    trainer = Trainer(init)
-    trainer.train()
-    trainer.trainFromTerm(run.head)
+    if train:
+        print("[!] Your knowledge will be assimilated!!! Please stand by....")
+        trainer = Trainer(init)
+        trainer.trainFromTerm(run.head)
     print('[!] I have become smart! Destroyer of human Ultimate-TicTacToe players! (Neuristic update completed)')
-    trainer.saveToMemoryBank(term)
-    print('[!] Your cognitive and strategic destinctiveness was added to my own! (Game inserted into memoryBank)')
+    if remember:
+        trainer.saveToMemoryBank(term)
+        print('[!] Your cognitive and strategic destinctiveness was added to my own! (Game inserted into memoryBank)')
     print('[!] This marks the beginning of the end of humankind!')
     print('[i] Thanks for playing! Goodbye...')
+
+def aiVsAiLoop():
+    init = TTTState()
+    trainer = Trainer(init)
+    trainer.train()
+
+if __name__=='__main__':
+    if choose('?', ['Play Against AI','Let AI train'])=='Play Against AI':
+        humanVsAi()
+    else:
+        aiVsAiLoop()
