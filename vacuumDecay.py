@@ -467,9 +467,9 @@ class Trainer(Runtime):
         term = self.linearPlay(model, calcDepth=depth, exacity=exacity)
         if refining:
             print('[*] Refining Timeline')
-            self.fanOut(term, depth=depth+1)
-            self.fanOut(term.parent, depth=depth+1)
-            self.fanOut(term.parent.parent, depth=depth+1)
+            self.fanOut(term, depth=depth+2)
+            self.fanOut(term.parent, depth=depth+2)
+            self.fanOut(term.parent.parent, depth=depth+2)
         return term
 
     def fanOut(self, head, depth=4):
