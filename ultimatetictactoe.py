@@ -93,8 +93,13 @@ class TTTState(State):
         self.update_box_won()
         game_won = self.check_small_box(self.box_won)
         if game_won == '.':
+            if self.checkDraw():
+                return -1
             return None
         return game_won == 'X'
+
+    def checkDraw(self):
+        return len(self.getAvaibleActions())==0
 
     def __str__(self):
         state = self.board
