@@ -99,7 +99,9 @@ class TTTState(State):
         return game_won == 'X'
 
     def checkDraw(self):
-        return len(self.getAvaibleActions())==0
+        for act in self.getAvaibleActions():
+            return False # at least one action avaible
+        return True
 
     def __str__(self):
         state = self.board
