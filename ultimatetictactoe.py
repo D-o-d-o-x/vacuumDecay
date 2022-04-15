@@ -141,40 +141,47 @@ class Model(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.smolChan = 12
-        self.compChan = 7
-
         self.smol = nn.Sequential(
             nn.Conv2d(
                 in_channels=1,
-                out_channels=self.smolChan,
+                out_channels=24,
                 kernel_size=(3,3),
                 stride=3,
                 padding=0,
             ),
             nn.ReLU()
         )
-        self.big = nn.Sequential(
-            nn.Linear(self.smolChan*9, self.compChan),
-            #nn.ReLU(),
-            #nn.Linear(self.compChan, 1),
+        self.comb = nn.Sequential(
+            nn.Conv1d(
+                in_channels=24,
+                out_channels=8,
+                kernel_size=1,
+                stride=1,
+                padding=0,
+            ),
+            nn.ReLU()
+        )
+        self.out = nn.Sequential(
+            nn.Linear(9*8, 32),
             nn.ReLU(),
-            nn.Linear(self.compChan, 3),
+            nn.Linear(32, 8),
             nn.ReLU(),
-            nn.Linear(3, 1),
+            nn.Linear(8, 1),
             nn.Sigmoid()
         )
 
     def forward(self, x):
         x = torch.reshape(x, (1,9,9))
         x = self.smol(x)
-        x = torch.reshape(x, (self.smolChan*9,))
-        y = self.big(x)
+        x = torch.reshape(x, (24,9))
+        x = self.comb(x)
+        x = torch.reshape(x, (-1,))
+        y = self.out(x)
         return y
 
 if __name__=="__main__":
     run = NeuralRuntime(TTTState())
-    run.game(None, 4)
+    run.game([0,1], 4)
 
-    trainer = Trainer(TTTState())
-    trainer.train()
+    #trainer = Trainer(TTTState())
+    #trainer.train()

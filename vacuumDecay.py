@@ -11,6 +11,7 @@ from threading import Event
 from queue import PriorityQueue, Empty
 from dataclasses import dataclass, field
 from typing import Any
+import random
 
 class Action():
     # Should hold the data representing an action
@@ -388,6 +389,7 @@ class Runtime():
     def __init__(self, initState):
         universe = QueueingUniverse()
         self.head = Node(initState, universe = universe)
+        _ = self.head.childs
         universe.newOpen(self.head)
 
     def spawnWorker(self):
@@ -460,9 +462,9 @@ class Trainer(Runtime):
         self.rootNode = Node(initState, universe = self.universe)
         self.terminal = None
 
-    def buildDatasetFromModel(self, model, depth=4, refining=True):
+    def buildDatasetFromModel(self, model, depth=4, refining=True, exacity=5):
         print('[*] Building Timeline')
-        term = self.linearPlay(model, calcDepth=depth)
+        term = self.linearPlay(model, calcDepth=depth, exacity=exacity)
         if refining:
             print('[*] Refining Timeline')
             self.fanOut(term, depth=depth+1)
@@ -475,7 +477,7 @@ class Trainer(Runtime):
             head = head.parent
         head.forceStrong(depth)
 
-    def linearPlay(self, model, calcDepth=7, verbose=True):
+    def linearPlay(self, model, calcDepth=7, exacity=5, verbose=True):
         head = self.rootNode
         self.universe.model = model
         while head.getWinner()==None:
@@ -490,7 +492,10 @@ class Trainer(Runtime):
             for c in head.childs:
                 opts.append((c, c.getStrongFor(head.curPlayer)))
             opts.sort(key=lambda x: x[1])
-            ind = int(pow(random.random(),5)*(len(opts)-1))
+            if exacity >= 10:
+                ind = 0
+            else:
+                ind = int(pow(random.random(),exacity)*(len(opts)-1))
             head = opts[ind][0]
         print('')
         return head
@@ -499,16 +504,20 @@ class Trainer(Runtime):
         head = term
         while True:
             yield head
+            if len(head.childs):
+                yield random.choice(head.childs)
             if head.parent == None:
                 return
             head = head.parent
 
-    def trainModel(self, model, lr=0.01, cut=0.01, calcDepth=4):
+    def trainModel(self, model, lr=0.00005, cut=0.01, calcDepth=4, exacity=5):
         loss_func = nn.MSELoss()
         optimizer = optim.Adam(model.parameters(), lr)
-        term = self.buildDatasetFromModel(model, depth=calcDepth)
+        term = self.buildDatasetFromModel(model, depth=calcDepth, exacity=exacity)
+        print('[*] Conditioning Brain...')
         for r in range(64):
             loss_sum = 0
+            lLoss = 0
             zeroLen = 0
             for i, node in enumerate(self.timelineIter(term)):
                 for p in range(self.rootNode.playersNum):
@@ -524,19 +533,20 @@ class Trainer(Runtime):
                         zeroLen+=1
                     if zeroLen == 5:
                         break
-            print(loss_sum/i)
-            if loss_sum/i < cut:
+            #print(loss_sum/i)
+            if r > 16 and (loss_sum/i < cut or lLoss == loss_sum):
                 return
+            lLoss = loss_sum
 
-    def main(self, model=None, gens=64):
+    def main(self, model=None, gens=1024, startGen=12):
         newModel = False
         if model==None:
             newModel = True
             model = self.rootNode.state.getModel()
         self.universe.scoreProvider = ['neural','naive'][newModel]
-        for gen in range(gens):
+        for gen in range(startGen, startGen+gens):
             print('[#####] Gen '+str(gen)+' training:')
-            self.trainModel(model, calcDepth=3)
+            self.trainModel(model, calcDepth=min(5,3+int(gen/16)), exacity=int(gen/3+1))
             self.universe.scoreProvider = 'neural'
             torch.save(model.state_dict(), 'brains/uttt.pth')
 
@@ -544,4 +554,4 @@ class Trainer(Runtime):
         model = self.rootNode.state.getModel()
         model.load_state_dict(torch.load('brains/uttt.pth'))
         model.eval()
-        self.main(model)
+        self.main(model, startGen=0)
