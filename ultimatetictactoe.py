@@ -180,8 +180,14 @@ class Model(nn.Module):
         return y
 
 if __name__=="__main__":
-    run = NeuralRuntime(TTTState())
+    init = TTTState()
+    run = NeuralRuntime(init)
     run.game([0,1], 4)
 
-    #trainer = Trainer(TTTState())
-    #trainer.train()
+
+    print("[!] Your knowledge will be assimilated!!!")
+    trainer = Trainer(init)
+    trainer.train()
+    trainer.trainFromTerm(run.head)
+    print('[!] I have become smart. Destroyer of human Ultimate-TicTacToe players!')
+    trainer.saveToMemoryBank(term)
