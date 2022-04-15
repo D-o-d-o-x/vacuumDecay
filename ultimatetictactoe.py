@@ -185,9 +185,12 @@ if __name__=="__main__":
     run.game([0,1], 4)
 
 
-    print("[!] Your knowledge will be assimilated!!!")
+    print("[!] Your knowledge will be assimilated!!! Please stand by....")
     trainer = Trainer(init)
     trainer.train()
     trainer.trainFromTerm(run.head)
-    print('[!] I have become smart. Destroyer of human Ultimate-TicTacToe players!')
+    print('[!] I have become smart! Destroyer of human Ultimate-TicTacToe players!')
     trainer.saveToMemoryBank(term)
+    print('[!] Your cognitive and strategic destinctiveness was added to my own!')
+    print('[!] This marks the beginning of the end of humankind!')
+    print('[i] Thanks for playing! Goodbye...')
