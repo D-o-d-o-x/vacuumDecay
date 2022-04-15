@@ -191,14 +191,14 @@ def humanVsAi(train=True, remember=True):
     run = NeuralRuntime(init)
     run.game([0,1], 4)
 
-    if train:
-        print("[!] Your knowledge will be assimilated!!! Please stand by....")
-        trainer = Trainer(init)
-        trainer.trainFromTerm(run.head)
-    print('[!] I have become smart! Destroyer of human Ultimate-TicTacToe players! (Neuristic update completed)')
     if remember:
         trainer.saveToMemoryBank(run.head)
         print('[!] Your cognitive and strategic destinctiveness was added to my own! (Game inserted into memoryBank)')
+    if train:
+        print("[!] Your knowledge will be assimilated!!! Please stand by.... (Updating Neuristic)")
+        trainer = Trainer(init)
+        trainer.trainFromTerm(run.head)
+    print('[!] I have become smart! Destroyer of human Ultimate-TicTacToe players! (Neuristic update completed)')
     print('[!] This marks the beginning of the end of humankind!')
     print('[i] Thanks for playing! Goodbye...')
 
