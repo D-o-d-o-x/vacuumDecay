@@ -465,9 +465,10 @@ class NeuralRuntime(Runtime):
 
 class Trainer(Runtime):
     def __init__(self, initState):
-        self.universe = Universe()
-        #self.universe = QueueingUniverse()
-        self.rootNode = Node(initState, universe = self.universe)
+        super().__init__(initState)
+        #self.universe = Universe()
+        self.universe = self.head.universe
+        self.rootNode = self.head
         self.terminal = None
 
     def buildDatasetFromModel(self, model, depth=4, refining=True, exacity=5):
@@ -478,8 +479,8 @@ class Trainer(Runtime):
             self.fanOut(term, depth=depth+2)
             self.fanOut(term.parent, depth=depth+2)
             self.fanOut(term.parent.parent, depth=depth+2)
-            #print('[*] Refining Timeline (exploring uncertain regions)')
-            #self.timelineExpandUncertain(term, 20)
+            print('[*] Refining Timeline (exploring uncertain regions)')
+            self.timelineExpandUncertain(term, 10)
         return term
 
     def fanOut(self, head, depth=4):
@@ -521,9 +522,8 @@ class Trainer(Runtime):
             head = head.parent
 
     def timelineExpandUncertain(self, term, secs):
-        return
         self.rootNode.universe.clearPQ()
-        self.rootNode.universe.activateEdge(rootNode)
+        self.rootNode.universe.activateEdge(self.rootNode)
         self.spawnWorker()
         time.sleep(secs)
         self.rootNode.universe.clearPQ()
