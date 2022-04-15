@@ -326,13 +326,13 @@ class Node():
             return -1
         return self.state.checkWin()
 
-    def _activateEdge(self):
+    def _activateEdge(self, dist=0):
         if not self.strongScoresAvaible():
             self.universe.newOpen(self)
         else:
             for c in self.childs:
-                if c._cascadeMemory > 0.0001:
-                    c._activateEdge()
+                if c._cascadeMemory > 0.001*dist or random.random()<0.01:
+                    c._activateEdge(dist=dist+1)
 
     def __str__(self):
         s = []
