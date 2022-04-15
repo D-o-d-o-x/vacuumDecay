@@ -289,7 +289,9 @@ class Node():
     def _calcScore(self, player):
         winner = self.getWinner()
         if winner!=None:
-            if winner==player:
+            if winner==-1:
+                self._scores[player] = 2/3 # draw
+            elif winner==player:
                 self._scores[player] = 0.0
             else:
                 self._scores[player] = 1.0
