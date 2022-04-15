@@ -320,6 +320,8 @@ class Node():
         return self.state.curPlayer
 
     def getWinner(self):
+        if len(self.childs)==0:
+            return -1
         return self.state.checkWin()
 
     def _activateEdge(self):
