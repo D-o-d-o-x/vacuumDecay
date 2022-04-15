@@ -197,7 +197,7 @@ def humanVsAi(train=True, remember=True):
         trainer.trainFromTerm(run.head)
     print('[!] I have become smart! Destroyer of human Ultimate-TicTacToe players! (Neuristic update completed)')
     if remember:
-        trainer.saveToMemoryBank(term)
+        trainer.saveToMemoryBank(run.head)
         print('[!] Your cognitive and strategic destinctiveness was added to my own! (Game inserted into memoryBank)')
     print('[!] This marks the beginning of the end of humankind!')
     print('[i] Thanks for playing! Goodbye...')

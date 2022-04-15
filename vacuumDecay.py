@@ -151,7 +151,7 @@ class QueueingUniverse(Universe):
             try:
                 yield self.pq.get(False).data
             except Empty:
-                time.sleep(1)
+                return None
 
     def activateEdge(self, head):
         head._activateEdge()
@@ -379,13 +379,15 @@ class Worker():
 
     def runLocal(self):
         for i, node in enumerate(self.universe.iter()):
+            if node==None:
+                time.sleep(1)
             if not self._alive:
                 return
             node.decayEvent()
 
     def kill(self):
         self._alive = False
-        self.thread.join()
+        self.thread.join(15)
 
     def revive(self):
         self._alive = True
