@@ -17,5 +17,6 @@ A new AI is created by subclassing the State-class and defining the following fu
  - (optional) interface to allow a human to select an action
 
 ### Current state of the project
-It currently does not work and implements none of the named functionality in a working fashion.  
-Experiment for TicTacToe, Dikehiker and an encryption-breaker for rc4 are being worked on.
+The only thing that currently works is the AI for Ultimate TicTacToe.  
+It uses a trained neural heuristic (neuristic)  
+You can train it or play against it (will also train it) using 'python ultimatetictactoe.py'
