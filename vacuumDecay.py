@@ -12,6 +12,8 @@ from queue import PriorityQueue, Empty
 from dataclasses import dataclass, field
 from typing import Any
 import random
+import datetime
+import pickle
 
 class Action():
     # Should hold the data representing an action
@@ -416,7 +418,7 @@ class Runtime():
                 return
         raise Exception('No such action avaible...')
 
-    def turn(self, bot=None, calcDepth=7):
+    def turn(self, bot=None, calcDepth=3):
         print(str(self.head))
         if bot==None:
             c = choose('Select action?', ['human', 'bot', 'undo', 'qlen'])
@@ -589,5 +591,5 @@ class Trainer(Runtime):
 
     def saveToMemoryBank(self, term):
         with open('memoryBank/uttt/'+datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')+'_'+str(int(random.random()*99999))+'.vdm', 'wb') as f:
-            pickel.dump(term, f)
+            pickle.dump(term, f)
 

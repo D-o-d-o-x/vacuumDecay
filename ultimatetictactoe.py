@@ -189,7 +189,7 @@ class Model(nn.Module):
 def humanVsAi(train=True, remember=True):
     init = TTTState()
     run = NeuralRuntime(init)
-    run.game([0,1], 4)
+    run.game([0,1], 3)
 
     if remember or train:
         trainer = Trainer(init)
