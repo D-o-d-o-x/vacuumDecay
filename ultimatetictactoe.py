@@ -186,7 +186,7 @@ class Model(nn.Module):
         y = self.out(x)
         return y
 
-def humanVsAi(train=True, remember=True):
+def humanVsAi(train=True, remember=False):
     init = TTTState()
     run = NeuralRuntime(init)
     run.game([0,1], 3)
