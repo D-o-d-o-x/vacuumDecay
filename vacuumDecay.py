@@ -473,22 +473,18 @@ class Trainer(Runtime):
         self.rootNode = self.head
         self.terminal = None
 
-    def buildDatasetFromModel(self, model, depth=4, refining=True, exacity=5):
+    def buildDatasetFromModel(self, model, depth=4, refining=True, fanOut=[16,16,8,8,6,6,5,4], uncertainSec=15, exacity=5):
         print('[*] Building Timeline')
         term = self.linearPlay(model, calcDepth=depth, exacity=exacity)
         if refining:
             print('[*] Refining Timeline (exploring alternative endings)')
-            self.fanOut(term, depth=depth+2)
-            self.fanOut(term.parent, depth=depth+2)
-            self.fanOut(term.parent.parent, depth=depth+2)
+            cur = term
+            for d in fanOut:
+                cur = cur.parent
+                cur.forceStrong(d)
             print('[*] Refining Timeline (exploring uncertain regions)')
-            self.timelineExpandUncertain(term, 10)
+            self.timelineExpandUncertain(term, uncertainSec)
         return term
-
-    def fanOut(self, head, depth=4):
-        for d in range(max(1, depth-2)):
-            head = head.parent
-        head.forceStrong(depth)
 
     def linearPlay(self, model, calcDepth=7, exacity=5, verbose=True):
         head = self.rootNode
@@ -510,7 +506,9 @@ class Trainer(Runtime):
             else:
                 ind = int(pow(random.random(),exacity)*(len(opts)-1))
             head = opts[ind][0]
-        print('')
+        if verbose:
+            print(head)
+        print(' => '+['O','X','No one '][self.head.getWinner()] + ' won!')
         return head
 
     def timelineIter(self, term):
@@ -546,6 +544,8 @@ class Trainer(Runtime):
                     inp = node.state.getTensor(player=p)
                     gol = torch.tensor(node.getStrongFor(p), dtype=torch.float)
                     out = model(inp)
+                    if not out:
+                        continue
                     loss = loss_func(out, gol)
                     optimizer.zero_grad()
                     loss.backward()
@@ -557,8 +557,9 @@ class Trainer(Runtime):
                         break
             #print(loss_sum/i)
             if r > 16 and (loss_sum/i < cut or lLoss == loss_sum):
-                return
+                return loss_sum
             lLoss = loss_sum
+        return loss_sum
 
     def main(self, model=None, gens=1024, startGen=12):
         newModel = False
@@ -568,7 +569,8 @@ class Trainer(Runtime):
         self.universe.scoreProvider = ['neural','naive'][newModel]
         for gen in range(startGen, startGen+gens):
             print('[#####] Gen '+str(gen)+' training:')
-            self.trainModel(model, calcDepth=min(5,3+int(gen/16)), exacity=int(gen/3+1))
+            loss = self.trainModel(model, calcDepth=min(5,3+int(gen/16)), exacity=int(gen/3+1))
+            print('[L] '+str(loss))
             self.universe.scoreProvider = 'neural'
             self.saveModel(model)
 
