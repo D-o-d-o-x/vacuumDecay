@@ -19,4 +19,7 @@ A new AI is created by subclassing the State-class and defining the following fu
 ### Current state of the project
 The only thing that currently works is the AI for Ultimate TicTacToe.  
 It uses a trained neural heuristic (neuristic)  
-You can train it or play against it (will also train it) using 'python ultimatetictactoe.py'
+You can train it or play against it (will also train it) using 'python ultimatetictactoe.py'  
+  
+The performance of the trained neuristic is pretty bad. I have some ideas on what could be the problems but no time to implement fixes.  
+(Focus on the ending of games at the beginning of training; more consistent exploration-depth for expanding while training; ...)
