@@ -1,3 +1,5 @@
+import os
+import io
 import time
 import random
 import threading
@@ -69,7 +71,7 @@ class State(ABC):
         # Lower prioritys get worked on first
         # Higher generations should have higher priority
         # Higher cascadeMemory (more influence on higher-order-scores) should have lower priority
-        return score + self.generation*0.5 - cascadeMemory*0.35
+        return -cascadeMemory + 100
 
     @abstractmethod
     def checkWin(self):
@@ -418,7 +420,7 @@ class Runtime():
                 return
         raise Exception('No such action avaible...')
 
-    def turn(self, bot=None, calcDepth=3):
+    def turn(self, bot=None, calcDepth=3, bg=True):
         print(str(self.head))
         if bot==None:
             c = choose('Select action?', ['human', 'bot', 'undo', 'qlen'])
@@ -445,14 +447,16 @@ class Runtime():
             action = self.head.askUserForAction()
             self.performAction(action)
 
-    def game(self, bots=None, calcDepth=7):
-        self.spawnWorker()
+    def game(self, bots=None, calcDepth=7, bg=True):
+        if bg:
+            self.spawnWorker()
         if bots==None:
             bots = [None]*self.head.playersNum
         while self.head.getWinner()==None:
-            self.turn(bots[self.head.curPlayer], calcDepth)
-        print(['O','X','No one'][head.getWinner()] + ' won!')
-        self.killWorker()
+            self.turn(bots[self.head.curPlayer], calcDepth, bg=True)
+        print(['O','X','No one'][self.head.getWinner()] + ' won!')
+        if bg:
+            self.killWorker()
 
 class NeuralRuntime(Runtime):
     def __init__(self, initState):
@@ -570,37 +574,58 @@ class Trainer(Runtime):
             lLoss = loss_sum
         return loss_sum
 
-    def main(self, model=None, gens=1024, startGen=12):
+    def main(self, model=None, gens=1024, startGen=0):
         newModel = False
         if model==None:
+            print('[!] No brain found. Creating new one...')
             newModel = True
             model = self.rootNode.state.getModel()
         self.universe.scoreProvider = ['neural','naive'][newModel]
+        model.train()
         for gen in range(startGen, startGen+gens):
             print('[#####] Gen '+str(gen)+' training:')
-            loss = self.trainModel(model, calcDepth=min(5,3+int(gen/16)), exacity=int(gen/3+1))
+            loss = self.trainModel(model, calcDepth=min(4,3+int(gen/16)), exacity=int(gen/3+1))
             print('[L] '+str(loss))
             self.universe.scoreProvider = 'neural'
-            self.saveModel(model)
+            self.saveModel(model, gen)
 
-    def saveModel(self, model):
-        torch.save(model.state_dict(), 'brains/uttt.pth')
+    def saveModel(self, model, gen):
+        dat = model.state_dict()
+        with open(self.getModelFileName(), 'wb') as f:
+            pickle.dump((gen, dat), f)
+
+    def loadModelState(self, model):
+        with open(self.getModelFileName(), 'rb') as f:
+            gen, dat = pickle.load(f)
+        model.load_state_dict(dat)
+        model.eval()
+        return gen
+
+    def loadModel(self):
+        model = self.rootNode.state.getModel()
+        gen = self.loadModelState(model)
+        return model, gen
 
     def train(self):
-        model = self.rootNode.state.getModel()
-        model.load_state_dict(torch.load('brains/uttt.pth'))
-        model.eval()
-        self.main(model, startGen=0)
+        if os.path.exists(self.getModelFileName()):
+            model, gen = self.loadModel()
+            self.main(model, startGen=gen+1)
+        else:
+            self.main()
+
+    def getModelFileName(self):
+        return 'brains/utt.vac'
 
     def trainFromTerm(self, term):
         model = self.rootNode.state.getModel()
-        model.load_state_dict(torch.load('brains/uttt.pth'))
+        model.load_state_dict(torch.load('brains/uttt.vac'))
         model.eval()
         self.universe.scoreProvider = 'neural'
         self.trainModel(model, calcDepth=4, exacity=10, term=term)
         self.saveModel(model)
 
     def saveToMemoryBank(self, term):
+        return
         with open('memoryBank/uttt/'+datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')+'_'+str(int(random.random()*99999))+'.vdm', 'wb') as f:
             pickle.dump(term, f)
 
