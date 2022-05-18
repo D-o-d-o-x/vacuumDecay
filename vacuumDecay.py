@@ -492,7 +492,7 @@ class Runtime():
         return model, gen
 
     def getModelFileName(self):
-        return 'brains/utt.vac'
+        return 'brains/uttt.vac'
 
     def saveToMemoryBank(self, term):
         return
@@ -605,7 +605,7 @@ class Trainer(Runtime):
         self.killWorker()
         print('')
 
-    def trainModel(self, model, lr=0.00005, cut=0.01, calcDepth=4, exacity=5, terms=None, batch=16):
+    def trainModel(self, model, lr=0.000001, cut=0.01, calcDepth=4, exacity=5, terms=None, batch=16):
         loss_func = nn.MSELoss()
         optimizer = optim.Adam(model.parameters(), lr)
         if terms == None:
@@ -631,9 +631,9 @@ class Trainer(Runtime):
                     loss_sum += loss.item()
                     if loss.item() == 0.0:
                         zeroLen += 1
-                    if zeroLen == 5:
-                        break
-            # print(loss_sum/i)
+                if zeroLen == 5:
+                    break
+            print(loss_sum/i)
             if r > 16 and (loss_sum/i < cut or lLoss == loss_sum):
                 return loss_sum
             lLoss = loss_sum
