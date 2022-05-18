@@ -6,6 +6,7 @@ from vacuumDecay import *
 from collections import Counter
 import itertools
 
+
 class TTTState(State):
     def __init__(self, curPlayer=0, generation=0, playersNum=2, board=None, lastMove=-1):
         if type(board) == type(None):
@@ -40,12 +41,12 @@ class TTTState(State):
         return "."
 
     def mutate(self, action):
-        newBoard = self.board[:action.data] + ['O','X'][self.curPlayer] + self.board[action.data+1:]
-        return TTTState(curPlayer=(self.curPlayer+1)%self.playersNum, playersNum=self.playersNum, board=newBoard, lastMove=action.data)
+        newBoard = self.board[:action.data] + ['O',
+                                               'X'][self.curPlayer] + self.board[action.data+1:]
+        return TTTState(curPlayer=(self.curPlayer+1) % self.playersNum, playersNum=self.playersNum, board=newBoard, lastMove=action.data)
 
     def box(self, x, y):
         return index(x, y) // 9
-
 
     def next_box(self, i):
         return i % 9
@@ -67,16 +68,17 @@ class TTTState(State):
         box_to_play = self.next_box(self.last_move)
         idxs = self.indices_of_box(box_to_play)
         if self.box_won[box_to_play] != ".":
-            pi_2d = [self.indices_of_box(b) for b in range(9) if self.box_won[b] == "."]
+            pi_2d = [self.indices_of_box(b) for b in range(
+                9) if self.box_won[b] == "."]
             possible_indices = list(itertools.chain.from_iterable(pi_2d))
         else:
             possible_indices = idxs
 
         for ind in possible_indices:
-            if self.board[ind]=='.':
+            if self.board[ind] == '.':
                 yield Action(self.curPlayer, ind)
 
-    #def getScoreFor(self, player):
+    # def getScoreFor(self, player):
     #    p = ['O','X'][player]
     #    sco = 5
     #    for w in self.box_won:
@@ -86,7 +88,7 @@ class TTTState(State):
     #            sco -= 0.5
     #    return 1/sco
 
-    #def getPriority(self, score, cascadeMem):
+    # def getPriority(self, score, cascadeMem):
     #    return -cascadeMem*1 + 100
 
     def checkWin(self):
@@ -100,13 +102,13 @@ class TTTState(State):
 
     def checkDraw(self):
         for act in self.getAvaibleActions():
-            return False # at least one action avaible
+            return False  # at least one action avaible
         return True
 
     def __str__(self):
         state = self.board
         acts = list(self.getAvaibleActions())
-        if len(acts)<=9:
+        if len(acts) <= 9:
             for i, act in enumerate(acts):
                 state = state[:act.data] + str(i+1) + state[act.data+1:]
         s = []
@@ -128,11 +130,10 @@ class TTTState(State):
         elif b == 'O':
             return -1.0 + 2.0 * self.curPlayer
         else:
-            return  1.0 - 2.0 * self.curPlayer
-
+            return 1.0 - 2.0 * self.curPlayer
 
     def getTensor(self, player=None, phase='default'):
-        if player==None:
+        if player == None:
             player = self.curPlayer
         s = ''
         for row in range(1, 10):
@@ -144,51 +145,60 @@ class TTTState(State):
     def getModel(cls, phase='default'):
         return Model()
 
+
 class Model(nn.Module):
     def __init__(self):
         super().__init__()
 
+        self.chansPerSmol = 24
+        self.chansPerSlot = 8
+        self.chansComp = 8
+
         self.smol = nn.Sequential(
             nn.Conv2d(
                 in_channels=1,
-                out_channels=16,
-                kernel_size=(3,3),
+                out_channels=self.chansPerSmol,
+                kernel_size=(3, 3),
                 stride=3,
                 padding=0,
             ),
             nn.ReLU()
         )
-        #self.comb = nn.Sequential(
-        #    nn.Conv1d(
-        #        in_channels=24,
-        #        out_channels=8,
-        #        kernel_size=1,
-        #        stride=1,
-        #        padding=0,
-        #    ),
-        #    nn.ReLU()
-        #)
+        self.comb = nn.Sequential(
+            nn.Conv1d(
+                in_channels=self.chansPerSmol,
+                out_channels=self.chansPerSlot,
+                kernel_size=1,
+                stride=1,
+                padding=0,
+            ),
+            nn.ReLU()
+        )
         self.out = nn.Sequential(
-            #nn.Linear(9*8, 32),
-            #nn.ReLU(),
-            #nn.Linear(32, 8),
-            #nn.ReLU(),
-            nn.Linear(16*9, 12),
+            nn.Linear(self.chansPerSlot*9, self.chansComp),
             nn.ReLU(),
-            nn.Linear(12, 1),
+            nn.Linear(self.chansComp, 1),
+            #nn.Linear(9*8, 32),
+            # nn.ReLU(),
+            #nn.Linear(32, 8),
+            # nn.ReLU(),
+            #nn.Linear(16*9, 12),
+            # nn.ReLU(),
+            #nn.Linear(12, 1),
             nn.Sigmoid()
         )
 
     def forward(self, x):
-        x = torch.reshape(x, (1,9,9))
+        x = torch.reshape(x, (1, 9, 9))
         x = self.smol(x)
-        #x = torch.reshape(x, (24,9))
-        #x = self.comb(x)
+        x = torch.reshape(x, (self.chansPerSmol, 9))
+        x = self.comb(x)
         x = torch.reshape(x, (-1,))
         y = self.out(x)
         return y
 
-def humanVsAi(train=True, remember=False, depth=3, bots=[0,1], noBg=False):
+
+def humanVsAi(train=True, remember=False, depth=3, bots=[0, 1], noBg=False):
     init = TTTState()
     run = NeuralRuntime(init)
     run.game(bots, depth, bg=not noBg)
@@ -199,27 +209,31 @@ def humanVsAi(train=True, remember=False, depth=3, bots=[0,1], noBg=False):
         trainer.saveToMemoryBank(run.head)
         print('[!] Your cognitive and strategic destinctiveness was added to my own! (Game inserted into memoryBank)')
     if train:
-        print("[!] Your knowledge will be assimilated!!! Please stand by.... (Updating Neuristic)")
+        print(
+            "[!] Your knowledge will be assimilated!!! Please stand by.... (Updating Neuristic)")
         trainer.trainFromTerm(run.head)
     print('[!] I have become smart! Destroyer of human Ultimate-TicTacToe players! (Neuristic update completed)')
     print('[!] This marks the beginning of the end of humankind!')
     print('[i] Thanks for playing! Goodbye...')
+
 
 def aiVsAiLoop():
     init = TTTState()
     trainer = Trainer(init)
     trainer.train()
 
-if __name__=='__main__':
-    options = ['Play Against AI','Play Against AI (AI begins)','Play Against AI (Fast Play)','Playground','Let AI train']
+
+if __name__ == '__main__':
+    options = ['Play Against AI',
+               'Play Against AI (AI begins)', 'Play Against AI (Fast Play)', 'Playground', 'Let AI train']
     opt = choose('?', options)
     if opt == options[0]:
         humanVsAi()
     elif opt == options[1]:
-        humanVsAi(bots[1,0])
+        humanVsAi(bots[1, 0])
     elif opt == options[2]:
-        humanVsAi(depth=2,noBg=True)
+        humanVsAi(depth=2, noBg=True)
     elif opt == options[3]:
-        humanVsAi(bots=[None,None])
+        humanVsAi(bots=[None, None])
     else:
         aiVsAiLoop()
