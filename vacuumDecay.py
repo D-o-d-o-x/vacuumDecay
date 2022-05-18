@@ -1,3 +1,7 @@
+if __name__ == '__main__':
+    print('[!] VacuumDecay should not be started directly')
+    exit()
+
 import os
 import io
 import time
@@ -16,6 +20,7 @@ from typing import Any
 import random
 import datetime
 import pickle
+
 
 class Action():
     # Should hold the data representing an action
@@ -36,6 +41,7 @@ class Action():
         # should return visual representation of this action
         # should start with < and end with >
         return "<P"+str(self.player)+"-"+str(self.data)+">"
+
 
 class State(ABC):
     # Hold a representation of the current game-state
@@ -99,7 +105,7 @@ class State(ABC):
 
     @abstractmethod
     def getTensor(self, player=None, phase='default'):
-        if player==None:
+        if player == None:
             player = self.curPlayer
         return torch.tensor([0])
 
@@ -109,6 +115,7 @@ class State(ABC):
 
     def getScoreNeural(self, model, player=None, phase='default'):
         return model(self.getTensor(player=player, phase=phase)).item()
+
 
 class Universe():
     def __init__(self):
@@ -129,10 +136,12 @@ class Universe():
     def activateEdge(self, head):
         pass
 
+
 @dataclass(order=True)
 class PQItem:
     priority: int
-    data: Any=field(compare=False)
+    data: Any = field(compare=False)
+
 
 class QueueingUniverse(Universe):
     def __init__(self):
@@ -140,8 +149,8 @@ class QueueingUniverse(Universe):
         self.pq = PriorityQueue()
 
     def newOpen(self, node):
-       item = PQItem(node.getPriority(), node)
-       self.pq.put(item)
+        item = PQItem(node.getPriority(), node)
+        self.pq.put(item)
 
     def merge(self, node):
         self.newOpen(node)
@@ -164,7 +173,7 @@ class QueueingUniverse(Universe):
 class Node():
     def __init__(self, state, universe=None, parent=None, lastAction=None):
         self.state = state
-        if universe==None:
+        if universe == None:
             print('[!] No Universe defined. Spawning one...')
             universe = Universe()
         self.universe = universe
@@ -175,7 +184,7 @@ class Node():
         self._scores = [None]*self.state.playersNum
         self._strongs = [None]*self.state.playersNum
         self._alive = True
-        self._cascadeMemory = 0 # Used for our alternative to alpha-beta pruning
+        self._cascadeMemory = 0  # Used for our alternative to alpha-beta pruning
 
     def kill(self):
         self._alive = False
@@ -193,31 +202,34 @@ class Node():
         self._childs = []
         actions = self.state.getAvaibleActions()
         for action in actions:
-            newNode = Node(self.state.mutate(action), self.universe, self, action)
+            newNode = Node(self.state.mutate(action),
+                           self.universe, self, action)
             self._childs.append(self.universe.merge(newNode))
 
     def getStrongFor(self, player):
-        if self._strongs[player]!=None:
+        if self._strongs[player] != None:
             return self._strongs[player]
         else:
             return self.getScoreFor(player)
 
-    def _pullStrong(self): # Currently Expecti-Max
+    def _pullStrong(self):  # Currently Expecti-Max
         strongs = [None]*self.playersNum
         for p in range(self.playersNum):
             cp = self.state.curPlayer
-            if cp == p: # P owns the turn; controlls outcome
+            if cp == p:  # P owns the turn; controlls outcome
                 best = inf
                 for c in self.childs:
                     if c.getStrongFor(p) < best:
                         best = c.getStrongFor(p)
                 strongs[p] = best
             else:
-                scos = [(c.getStrongFor(p), c.getStrongFor(cp)) for c in self.childs]
+                scos = [(c.getStrongFor(p), c.getStrongFor(cp))
+                        for c in self.childs]
                 scos.sort(key=lambda x: x[1])
-                betterHalf = scos[:max(3,int(len(scos)/3))]
+                betterHalf = scos[:max(3, int(len(scos)/3))]
                 myScores = [bh[0]**2 for bh in betterHalf]
-                strongs[p] = sqrt(myScores[0]*0.75 + sum(myScores)/(len(myScores)*4))
+                strongs[p] = sqrt(myScores[0]*0.75 +
+                                  sum(myScores)/(len(myScores)*4))
         update = False
         for s in range(self.playersNum):
             if strongs[s] != self._strongs[s]:
@@ -225,7 +237,7 @@ class Node():
                 break
         self._strongs = strongs
         if update:
-            if self.parent!=None:
+            if self.parent != None:
                 cascade = self.parent._pullStrong()
             else:
                 cascade = 2
@@ -235,7 +247,7 @@ class Node():
         return 0
 
     def forceStrong(self, depth=3):
-        if depth==0:
+        if depth == 0:
             self.strongDecay()
         else:
             if len(self.childs):
@@ -271,13 +283,13 @@ class Node():
 
     def scoresAvaible(self):
         for p in self._scores:
-            if p==None:
+            if p == None:
                 return False
         return True
 
     def strongScoresAvaible(self):
         for p in self._strongs:
-            if p==None:
+            if p == None:
                 return False
         return True
 
@@ -290,10 +302,10 @@ class Node():
 
     def _calcScore(self, player):
         winner = self._getWinner()
-        if winner!=None:
-            if winner==player:
+        if winner != None:
+            if winner == player:
                 self._scores[player] = 0.0
-            elif winner==-1:
+            elif winner == -1:
                 self._scores[player] = 2/3
             else:
                 self._scores[player] = 1.0
@@ -301,7 +313,8 @@ class Node():
         if self.universe.scoreProvider == 'naive':
             self._scores[player] = self.state.getScoreFor(player)
         elif self.universe.scoreProvider == 'neural':
-            self._scores[player] = self.state.getScoreNeural(self.universe.model, player)
+            self._scores[player] = self.state.getScoreNeural(
+                self.universe.model, player)
         else:
             raise Exception('Uknown Score-Provider')
 
@@ -327,7 +340,7 @@ class Node():
         return self.state.checkWin()
 
     def getWinner(self):
-        if len(self.childs)==0:
+        if len(self.childs) == 0:
             return -1
         return self._getWinner()
 
@@ -336,7 +349,7 @@ class Node():
             self.universe.newOpen(self)
         else:
             for c in self.childs:
-                if c._cascadeMemory > 0.001*(dist-2) or random.random()<0.01:
+                if c._cascadeMemory > 0.001*(dist-2) or random.random() < 0.01:
                     c._activateEdge(dist=dist+1)
 
     def __str__(self):
@@ -350,26 +363,28 @@ class Node():
         s.append("[ score: "+str(self.getScoreFor(0))+" ]")
         return '\n'.join(s)
 
+
 def choose(txt, options):
     while True:
         print('[*] '+txt)
-        for num,opt in enumerate(options):
+        for num, opt in enumerate(options):
             print('['+str(num+1)+'] ' + str(opt))
         inp = input('[> ')
         try:
             n = int(inp)
-            if n in range(1,len(options)+1):
+            if n in range(1, len(options)+1):
                 return options[n-1]
         except:
             pass
         for opt in options:
-            if inp==str(opt):
+            if inp == str(opt):
                 return opt
-        if len(inp)==1:
+        if len(inp) == 1:
             for opt in options:
-                if inp==str(opt)[0]:
+                if inp == str(opt)[0]:
                     return opt
         print('[!] Invalid Input.')
+
 
 class Worker():
     def __init__(self, universe):
@@ -383,7 +398,7 @@ class Worker():
 
     def runLocal(self):
         for i, node in enumerate(self.universe.iter()):
-            if node==None:
+            if node == None:
                 time.sleep(1)
             if not self._alive:
                 return
@@ -396,10 +411,11 @@ class Worker():
     def revive(self):
         self._alive = True
 
+
 class Runtime():
     def __init__(self, initState):
         universe = QueueingUniverse()
-        self.head = Node(initState, universe = universe)
+        self.head = Node(initState, universe=universe)
         _ = self.head.childs
         universe.newOpen(self.head)
 
@@ -422,15 +438,15 @@ class Runtime():
 
     def turn(self, bot=None, calcDepth=3, bg=True):
         print(str(self.head))
-        if bot==None:
+        if bot == None:
             c = choose('Select action?', ['human', 'bot', 'undo', 'qlen'])
-            if c=='undo':
+            if c == 'undo':
                 self.head = self.head.parent
                 return
-            elif c=='qlen':
+            elif c == 'qlen':
                 print(self.head.universe.pq.qsize())
                 return
-            bot = c=='bot'
+            bot = c == 'bot'
         if bot:
             self.head.forceStrong(calcDepth)
             opts = []
@@ -450,24 +466,49 @@ class Runtime():
     def game(self, bots=None, calcDepth=7, bg=True):
         if bg:
             self.spawnWorker()
-        if bots==None:
+        if bots == None:
             bots = [None]*self.head.playersNum
-        while self.head.getWinner()==None:
+        while self.head.getWinner() == None:
             self.turn(bots[self.head.curPlayer], calcDepth, bg=True)
-        print(['O','X','No one'][self.head.getWinner()] + ' won!')
+        print(['O', 'X', 'No one'][self.head.getWinner()] + ' won!')
         if bg:
             self.killWorker()
+
+    def saveModel(self, model, gen):
+        dat = model.state_dict()
+        with open(self.getModelFileName(), 'wb') as f:
+            pickle.dump((gen, dat), f)
+
+    def loadModelState(self, model):
+        with open(self.getModelFileName(), 'rb') as f:
+            gen, dat = pickle.load(f)
+        model.load_state_dict(dat)
+        model.eval()
+        return gen
+
+    def loadModel(self):
+        model = self.head.state.getModel()
+        gen = self.loadModelState(model)
+        return model, gen
+
+    def getModelFileName(self):
+        return 'brains/utt.vac'
+
+    def saveToMemoryBank(self, term):
+        return
+        with open('memoryBank/uttt/'+datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')+'_'+str(int(random.random()*99999))+'.vdm', 'wb') as f:
+            pickle.dump(term, f)
+
 
 class NeuralRuntime(Runtime):
     def __init__(self, initState):
         super().__init__(initState)
 
-        model = self.head.state.getModel()
-        model.load_state_dict(torch.load('brains/uttt.pth'))
-        model.eval()
+        model, gen = self.loadModel()
 
         self.head.universe.model = model
         self.head.universe.scoreProvider = 'neural'
+
 
 class Trainer(Runtime):
     def __init__(self, initState):
@@ -477,7 +518,7 @@ class Trainer(Runtime):
         self.rootNode = self.head
         self.terminal = None
 
-    def buildDatasetFromModel(self, model, depth=4, refining=True, fanOut=[5,5,5,5,4,4,4,4], uncertainSec=15, exacity=5):
+    def buildDatasetFromModel(self, model, depth=4, refining=True, fanOut=[5, 5, 5, 5, 4, 4, 4, 4], uncertainSec=15, exacity=5):
         print('[*] Building Timeline')
         term = self.linearPlay(model, calcDepth=depth, exacity=exacity)
         if refining:
@@ -496,42 +537,62 @@ class Trainer(Runtime):
         head = self.rootNode
         self.universe.model = model
         self.spawnWorker()
-        while head.getWinner()==None:
+        while head.getWinner() == None:
             if verbose:
                 print(head)
             else:
                 print('.', end='', flush=True)
             head.forceStrong(calcDepth)
             opts = []
-            if len(head.childs)==0:
+            if len(head.childs) == 0:
                 break
             for c in head.childs:
                 opts.append((c, c.getStrongFor(head.curPlayer)))
             if firstNRandom:
-                firstNRandom-=1
+                firstNRandom -= 1
                 ind = int(random.random()*len(opts))
             else:
                 opts.sort(key=lambda x: x[1])
                 if exacity >= 10:
                     ind = 0
                 else:
-                    ind = int(pow(random.random(),exacity)*(len(opts)-1))
+                    ind = int(pow(random.random(), exacity)*(len(opts)-1))
             head = opts[ind][0]
         self.killWorker()
         if verbose:
             print(head)
-        print(' => '+['O','X','No one'][head.getWinner()] + ' won!')
+        print(' => '+['O', 'X', 'No one'][head.getWinner()] + ' won!')
         return head
 
-    def timelineIter(self, term):
-        head = term
+    def timelineIterSingle(self, term):
+        for i in self.timelineIter(self, [term]):
+            yield i
+
+    def timelineIter(self, terms, altChildPerNode=-1):
+        batch = len(terms)
+        heads = terms
         while True:
-            yield head
-            if len(head.childs):
-                yield random.choice(head.childs)
-            if head.parent == None:
+            empty = True
+            for b in range(batch):
+                head = heads[b]
+                if head == None:
+                    continue
+                empty = False
+                yield head
+                if len(head.childs):
+                    if altChildPerNode == -1:  # all
+                        for child in head.childs:
+                            yield child
+                    else:
+                        for j in range(min(altChildPerNode, int(len(head.childs)/2))):
+                            yield random.choice(head.childs)
+                if head.parent == None:
+                    head = None
+                else:
+                    head = head.parent
+                heads[b] = head
+            if empty:
                 return
-            head = head.parent
 
     def timelineExpandUncertain(self, term, secs):
         self.rootNode.universe.clearPQ()
@@ -544,20 +605,24 @@ class Trainer(Runtime):
         self.killWorker()
         print('')
 
-    def trainModel(self, model, lr=0.00005, cut=0.01, calcDepth=4, exacity=5, term=None):
+    def trainModel(self, model, lr=0.00005, cut=0.01, calcDepth=4, exacity=5, terms=None, batch=16):
         loss_func = nn.MSELoss()
         optimizer = optim.Adam(model.parameters(), lr)
-        if term==None:
-            term = self.buildDatasetFromModel(model, depth=calcDepth, exacity=exacity)
+        if terms == None:
+            terms = []
+            for i in range(batch):
+                terms.append(self.buildDatasetFromModel(
+                    model, depth=calcDepth, exacity=exacity))
         print('[*] Conditioning Brain')
         for r in range(64):
             loss_sum = 0
             lLoss = 0
             zeroLen = 0
-            for i, node in enumerate(self.timelineIter(term)):
+            for i, node in enumerate(self.timelineIter(terms)):
                 for p in range(self.rootNode.playersNum):
                     inp = node.state.getTensor(player=p)
-                    gol = torch.tensor([node.getStrongFor(p)], dtype=torch.float)
+                    gol = torch.tensor(
+                        [node.getStrongFor(p)], dtype=torch.float)
                     out = model(inp)
                     loss = loss_func(out, gol)
                     optimizer.zero_grad()
@@ -565,10 +630,10 @@ class Trainer(Runtime):
                     optimizer.step()
                     loss_sum += loss.item()
                     if loss.item() == 0.0:
-                        zeroLen+=1
+                        zeroLen += 1
                     if zeroLen == 5:
                         break
-            #print(loss_sum/i)
+            # print(loss_sum/i)
             if r > 16 and (loss_sum/i < cut or lLoss == loss_sum):
                 return loss_sum
             lLoss = loss_sum
@@ -576,35 +641,25 @@ class Trainer(Runtime):
 
     def main(self, model=None, gens=1024, startGen=0):
         newModel = False
-        if model==None:
+        if model == None:
             print('[!] No brain found. Creating new one...')
             newModel = True
             model = self.rootNode.state.getModel()
-        self.universe.scoreProvider = ['neural','naive'][newModel]
+        self.universe.scoreProvider = ['neural', 'naive'][newModel]
         model.train()
         for gen in range(startGen, startGen+gens):
             print('[#####] Gen '+str(gen)+' training:')
-            loss = self.trainModel(model, calcDepth=min(4,3+int(gen/16)), exacity=int(gen/3+1))
+            loss = self.trainModel(model, calcDepth=min(
+                4, 3+int(gen/16)), exacity=int(gen/3+1), batch=4)
             print('[L] '+str(loss))
             self.universe.scoreProvider = 'neural'
             self.saveModel(model, gen)
 
-    def saveModel(self, model, gen):
-        dat = model.state_dict()
-        with open(self.getModelFileName(), 'wb') as f:
-            pickle.dump((gen, dat), f)
-
-    def loadModelState(self, model):
-        with open(self.getModelFileName(), 'rb') as f:
-            gen, dat = pickle.load(f)
-        model.load_state_dict(dat)
-        model.eval()
-        return gen
-
-    def loadModel(self):
-        model = self.rootNode.state.getModel()
-        gen = self.loadModelState(model)
-        return model, gen
+    def trainFromTerm(self, term):
+        model, gen = self.loadModel()
+        self.universe.scoreProvider = 'neural'
+        self.trainModel(model, calcDepth=4, exacity=10, term=term)
+        self.saveModel(model)
 
     def train(self):
         if os.path.exists(self.getModelFileName()):
@@ -612,20 +667,3 @@ class Trainer(Runtime):
             self.main(model, startGen=gen+1)
         else:
             self.main()
-
-    def getModelFileName(self):
-        return 'brains/utt.vac'
-
-    def trainFromTerm(self, term):
-        model = self.rootNode.state.getModel()
-        model.load_state_dict(torch.load('brains/uttt.vac'))
-        model.eval()
-        self.universe.scoreProvider = 'neural'
-        self.trainModel(model, calcDepth=4, exacity=10, term=term)
-        self.saveModel(model)
-
-    def saveToMemoryBank(self, term):
-        return
-        with open('memoryBank/uttt/'+datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')+'_'+str(int(random.random()*99999))+'.vdm', 'wb') as f:
-            pickle.dump(term, f)
-
