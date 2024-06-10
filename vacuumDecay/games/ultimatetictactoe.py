@@ -1,10 +1,15 @@
 """
 A lot of this code was stolen from Pulkit Maloo (https://github.com/pulkitmaloo/Ultimate-Tic-Tac-Toe)
 """
+import numpy as np
+import torch
+from troch import nn
+from PIL import Image, ImageDraw
 
-from vacuumDecay import *
 from collections import Counter
 import itertools
+
+from vacuumDecay import State, Action, Runtime, NeuralRuntime, Trainer, choose, main
 
 
 class TTTState(State):
@@ -46,7 +51,7 @@ class TTTState(State):
         return TTTState(curPlayer=(self.curPlayer+1) % self.playersNum, playersNum=self.playersNum, board=newBoard, lastMove=action.data)
 
     def box(self, x, y):
-        return index(x, y) // 9
+        return self.index(x, y) // 9
 
     def next_box(self, i):
         return i % 9
@@ -197,43 +202,5 @@ class Model(nn.Module):
         y = self.out(x)
         return y
 
-
-def humanVsAi(train=True, remember=False, depth=3, bots=[0, 1], noBg=False):
-    init = TTTState()
-    run = NeuralRuntime(init)
-    run.game(bots, depth, bg=not noBg)
-
-    if remember or train:
-        trainer = Trainer(init)
-    if remember:
-        trainer.saveToMemoryBank(run.head)
-        print('[!] Your cognitive and strategic destinctiveness was added to my own! (Game inserted into memoryBank)')
-    if train:
-        print(
-            "[!] Your knowledge will be assimilated!!! Please stand by.... (Updating Neuristic)")
-        trainer.trainFromTerm(run.head)
-    print('[!] I have become smart! Destroyer of human Ultimate-TicTacToe players! (Neuristic update completed)')
-    print('[!] This marks the beginning of the end of humankind!')
-    print('[i] Thanks for playing! Goodbye...')
-
-
-def aiVsAiLoop():
-    init = TTTState()
-    trainer = Trainer(init)
-    trainer.train()
-
-
-if __name__ == '__main__':
-    options = ['Play Against AI',
-               'Play Against AI (AI begins)', 'Play Against AI (Fast Play)', 'Playground', 'Let AI train']
-    opt = choose('?', options)
-    if opt == options[0]:
-        humanVsAi()
-    elif opt == options[1]:
-        humanVsAi(bots[1, 0])
-    elif opt == options[2]:
-        humanVsAi(depth=2, noBg=True)
-    elif opt == options[3]:
-        humanVsAi(bots=[None, None])
-    else:
-        aiVsAiLoop()
+if __name__=="__main__":
+    main(TTTState)
