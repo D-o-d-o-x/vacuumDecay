@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Game Tree Visualization</title>
+    <script src="https://d3js.org/d3.v5.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/2.3.0/socket.io.js"></script>
+</head>
+<body>
+    <div id="graph"></div>
+    <script>
+        var socket = io.connect('http://' + document.domain + ':' + location.port);
+
+        var svg = d3.select("#graph").append("svg")
+            .attr("width", window.innerWidth)
+            .attr("height", window.innerHeight);
+
+        var simulation = d3.forceSimulation()
+            .force("link", d3.forceLink().id(function(d) { return d.id; }).distance(100))
+            .force("charge", d3.forceManyBody().strength(-300))
+            .force("center", d3.forceCenter(window.innerWidth / 2, window.innerHeight / 2));
+
+        var link = svg.append("g")
+            .attr("class", "links")
+            .selectAll("line");
+
+        var node = svg.append("g")
+            .attr("class", "nodes")
+            .selectAll("circle");
+
+        socket.on('update', function(data) {
+            var nodes = data.nodes;
+            var edges = data.edges;
+
+            link = link.data(edges);
+            link.exit().remove();
+            link = link.enter().append("line").merge(link);
+
+            node = node.data(nodes);
+            node.exit().remove();
+            node = node.enter().append("circle")
+                .attr("r", 5)
+                .attr("fill", function(d) {
+                    var age = Date.now() - d.last_updated;
+                    return d3.interpolateCool(Math.min(age / 10000, 1));
+                })
+                .merge(node);
+
+            simulation.nodes(nodes)
+                .on("tick", ticked);
+
+            simulation.force("link")
+                .links(edges);
+
+            simulation.alpha(1).restart();
+        });
+
+        function ticked() {
+            link
+                .attr("x1", function(d) { return d.source.x; })
+                .attr("y1", function(d) { return d.source.y; })
+                .attr("x2", function(d) { return d.target.x; })
+                .attr("y2", function(d) { return d.target.y; });
+
+            node
+                .attr("cx", function(d) { return d.x; })
+                .attr("cy", function(d) { return d.y; });
+        }
+    </script>
+</body>
+</html>
