@@ -7,6 +7,7 @@ name = "vacuumDecay"
 version = "0.1.0"
 dependencies = [
     "torch",
+    "numpy",
     "flask",
     "flask-socketio",
     "networkx",

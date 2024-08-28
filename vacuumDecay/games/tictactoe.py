@@ -25,6 +25,9 @@ class TTTAction(Action):
                 draw.line((x+40, y-40, x-40, y+40), fill='red', width=2)
         return img
 
+    def getTensor(self, state, player=None):
+        return torch.concat(torch.tensor([self.turn]), torch.tensor(state.board), torch.tensor(state.mutate(self).board))
+
 class TTTState(State):
     def __init__(self, curPlayer=0, generation=0, playersNum=2, board=None):
         if type(board) == type(None):
@@ -66,17 +69,29 @@ class TTTState(State):
             s.append(" ".join([str(p) if p!=None else '.' for p in self.board[l*3:][:3]]))
         return "\n".join(s)
 
-    def getTensor(self):
-        return torch.tensor([self.turn] + self.board)
+    def getTensor(self, player=None):
+        return torch.concat(torch.tensor([self.curPlayer]), torch.tensor(self.board))
 
     @classmethod
-    def getModel():
+    def getVModel(cls):
         return torch.nn.Sequential(
             torch.nn.Linear(10, 10),
-            torch.nn.ReLu(),
+            torch.nn.ReLU(),
             torch.nn.Linear(10, 3),
+            torch.nn.ReLU(),
+            torch.nn.Linear(3,1),
             torch.nn.Sigmoid(),
-            torch.nn.Linear(3,1)
+        )
+
+    @classmethod
+    def getQModel(cls):
+        return torch.nn.Sequential(
+            torch.nn.Linear(20, 12),
+            torch.nn.ReLU(),
+            torch.nn.Linear(12, 3),
+            torch.nn.ReLU(),
+            torch.nn.Linear(3,1),
+            torch.nn.Sigmoid(),
         )
 
     def getImage(self):
@@ -98,4 +113,4 @@ class TTTState(State):
         return img
 
 if __name__=="__main__":
-    main(TTTState)
+    main(TTTState, start_visualizer=False)

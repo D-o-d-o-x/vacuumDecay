@@ -2,70 +2,124 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Game Tree Visualization</title>
+    <title>Interactive Tree Visualization</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script src="https://d3js.org/d3.v5.min.js"></script>
-    <script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/2.3.0/socket.io.js"></script>
+    <style>
+        .links line {
+            stroke: #999;
+            stroke-opacity: 0.6;
+            stroke-width: 1.5px;
+        }
+
+        .nodes rect {
+            stroke: #fff;
+            stroke-width: 1.5px;
+        }
+
+        text {
+            font: 10px sans-serif;
+            pointer-events: none;
+        }
+    </style>
 </head>
 <body>
     <div id="graph"></div>
     <script>
-        var socket = io.connect('http://' + document.domain + ':' + location.port);
+        var socket = io();
+
+        var margin = {top: 20, right: 120, bottom: 20, left: 120},
+            width = 960 - margin.right - margin.left,
+            height = 800 - margin.top - margin.bottom;
 
         var svg = d3.select("#graph").append("svg")
-            .attr("width", window.innerWidth)
-            .attr("height", window.innerHeight);
+            .attr("width", width + margin.right + margin.left)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
-        var simulation = d3.forceSimulation()
-            .force("link", d3.forceLink().id(function(d) { return d.id; }).distance(100))
-            .force("charge", d3.forceManyBody().strength(-300))
-            .force("center", d3.forceCenter(window.innerWidth / 2, window.innerHeight / 2));
+        var tree = d3.tree().size([height, width]);
 
-        var link = svg.append("g")
-            .attr("class", "links")
-            .selectAll("line");
-
-        var node = svg.append("g")
-            .attr("class", "nodes")
-            .selectAll("circle");
+        var root;
 
         socket.on('update', function(data) {
-            var nodes = data.nodes;
-            var edges = data.edges;
+            console.log(data);
 
-            link = link.data(edges);
+            var stratify = d3.stratify()
+                .id(function(d) { return d.id; })
+                .parentId(function(d) { return d.parentId; });
+
+            try {
+                root = stratify(data.nodes);
+            } catch (e) {
+                console.error(e);
+                return;
+            }
+
+            tree(root);
+
+            var link = svg.selectAll(".link")
+                .data(root.links(), function(d) { return d.source.id + "-" + d.target.id; });
+
             link.exit().remove();
-            link = link.enter().append("line").merge(link);
 
-            node = node.data(nodes);
+            link.enter().append("path")
+                .attr("class", "link")
+                .merge(link)
+                .attr("d", d3.linkHorizontal()
+                    .x(function(d) { return d.y; })
+                    .y(function(d) { return d.x; }));
+
+            var node = svg.selectAll(".node")
+                .data(root.descendants(), function(d) { return d.id; });
+
             node.exit().remove();
-            node = node.enter().append("circle")
-                .attr("r", 5)
+
+            var nodeEnter = node.enter().append("g")
+                .attr("class", "node")
+                .attr("transform", function(d) {
+                    return "translate(" + d.y + "," + d.x + ")";
+                });
+
+            nodeEnter.append("rect")
+                .attr("width", 40)
+                .attr("height", 40)
+                .attr("x", -20)
+                .attr("y", -20)
                 .attr("fill", function(d) {
-                    var age = Date.now() - d.last_updated;
+                    var age = Date.now() - d.data.last_updated;
                     return d3.interpolateCool(Math.min(age / 10000, 1));
-                })
-                .merge(node);
+                });
 
-            simulation.nodes(nodes)
-                .on("tick", ticked);
+            nodeEnter.append("image")
+                .attr("xlink:href", function(d) { return d.data.image ? 'data:image/jpeg;base64,' + d.data.image : ''; })
+                .attr("x", -20)
+                .attr("y", -20)
+                .attr("width", 40)
+                .attr("height", 40);
 
-            simulation.force("link")
-                .links(edges);
+            nodeEnter.append("text")
+                .attr("dy", -30)
+                .attr("dx", 0)
+                .text(function(d) { return "Player: " + (d.data.currentPlayer !== undefined ? d.data.currentPlayer : 'N/A'); });
 
-            simulation.alpha(1).restart();
+            nodeEnter.append("text")
+                .attr("dy", -15)
+                .attr("dx", 0)
+                .text(function(d) {
+                    if (d.data.winProbs && d.data.winProbs.length >= 2) {
+                        return "Win Probs: P0: " + d.data.winProbs[0].toFixed(2) + ", P1: " + d.data.winProbs[1].toFixed(2);
+                    } else {
+                        return "Win Probs: N/A";
+                    }
+                });
+
+            node = nodeEnter.merge(node);
+
+            node.attr("transform", function(d) {
+                return "translate(" + d.y + "," + d.x + ")";
+            });
         });
-
-        function ticked() {
-            link
-                .attr("x1", function(d) { return d.source.x; })
-                .attr("y1", function(d) { return d.source.y; })
-                .attr("x2", function(d) { return d.target.x; })
-                .attr("y2", function(d) { return d.target.y; });
-
-            node
-                .attr("cx", function(d) { return d.x; })
-                .attr("cy", function(d) { return d.y; });
-        }
     </script>
 </body>
 </html>

@@ -23,25 +23,25 @@ def aiVsAiLoop(StateClass, start_visualizer=False):
     trainer = Trainer(init, start_visualizer=start_visualizer)
     trainer.train()
 
-def humanVsNaive(StateClass, start_visualizer=False):
+def humanVsNaive(StateClass, start_visualizer=False, calcDepth=7):
     run = Runtime(StateClass(), start_visualizer=start_visualizer)
-    run.game()
+    run.game(calcDepth=calcDepth)
 
-def main(StateClass):
+def main(StateClass, **kwargs):
     options = ['Play Against AI',
                'Play Against AI (AI begins)', 'Play Against AI (Fast Play)', 'Playground', 'Let AI train', 'Play against Naive']
     opt = choose('?', options)
     if opt == options[0]:
-        humanVsAi(StateClass)
+        humanVsAi(StateClass,**kwargs)
     elif opt == options[1]:
-        humanVsAi(StateClass, bots=[1, 0])
+        humanVsAi(StateClass, bots=[1, 0], **kwargs)
     elif opt == options[2]:
-        humanVsAi(StateClass, depth=2, noBg=True)
+        humanVsAi(StateClass, depth=2, noBg=True, **kwargs)
     elif opt == options[3]:
-        humanVsAi(StateClass, bots=[None, None])
+        humanVsAi(StateClass, bots=[None, None], **kwargs)
     elif opt == options[4]:
-        aiVsAiLoop(StateClass)
+        aiVsAiLoop(StateClass, **kwargs)
     elif opt == options[5]:
-        humanVsNaive(StateClass)
+        humanVsNaive(StateClass, **kwargs)
     else:
-        aiVsAiLoop(StateClass)
+        aiVsAiLoop(StateClass, **kwargs)

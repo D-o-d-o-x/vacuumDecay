@@ -43,14 +43,14 @@ class Runtime():
     def __init__(self, initState, start_visualizer=False):
         universe = QueueingUniverse()
         self.head = Node(initState, universe=universe)
+        self.root = self.head
         _ = self.head.childs
         universe.newOpen(self.head)
-        self.visualizer = None
         if start_visualizer:
             self.startVisualizer()
 
     def startVisualizer(self):
-        self.visualizer = Visualizer(self.head.universe)
+        self.visualizer = Visualizer(self)
         self.visualizer.start()
 
     def spawnWorker(self):
@@ -85,11 +85,11 @@ class Runtime():
             self.head.forceStrong(calcDepth)
             opts = []
             for c in self.head.childs:
-                opts.append((c, c.getStrongFor(self.head.curPlayer)))
-            opts.sort(key=lambda x: x[1])
+                opts.append((c, c.getStrongFor(self.head.curPlayer) + random.random()*0.000000001))
+            opts.sort(key=lambda x: x[1], reverse=True)
             print('[i] Evaluated Options:')
             for o in opts:
-                print('[ ]' + str(o[0].lastAction) + " (Score: "+str(o[1])+")")
+                print('[ ]' + str(o[0].lastAction) + " (Win prob: "+str(int((o[1])*10000)/100)+"%)")
             print('[#] I choose to play: ' + str(opts[0][0].lastAction))
             self.performAction(opts[0][0].lastAction)
         else:
@@ -107,22 +107,23 @@ class Runtime():
         if bg:
             self.killWorker()
 
-    def saveModel(self, model, gen):
-        dat = model.state_dict()
+    def saveModel(self, v_model, q_model, gen):
+        v_state = v_model.state_dict()
+        q_model = q_model.state_dict()
         with open(self.getModelFileName(), 'wb') as f:
-            pickle.dump((gen, dat), f)
+            pickle.dump((gen, v_state, q_model), f)
 
-    def loadModelState(self, model):
+    def loadModelState(self, v_model, q_model):
         with open(self.getModelFileName(), 'rb') as f:
-            gen, dat = pickle.load(f)
-        model.load_state_dict(dat)
-        model.eval()
+            gen, v_state, q_state = pickle.load(f)
+        v_model.load_state_dict(v_state)
+        q_model.load_state_dict(q_state)
         return gen
 
     def loadModel(self):
-        model = self.head.state.getModel()
-        gen = self.loadModelState(model)
-        return model, gen
+        v_model, q_model = self.head.state.getVModel(), self.head.state.getQModel()
+        gen = self.loadModelState(v_model, q_model)
+        return v_model, q_model, gen
 
     def getModelFileName(self):
         return 'brains/uttt.vac'
@@ -136,27 +137,29 @@ class NeuralRuntime(Runtime):
     def __init__(self, initState, **kwargs):
         super().__init__(initState, **kwargs)
 
-        model, gen = self.loadModel()
+        v_model, q_model, gen = self.loadModel()
 
-        self.head.universe.model = model
+        self.head.universe.v_model = v_model
+        self.head.universe.q_model = q_model
         self.head.universe.scoreProvider = 'neural'
 
 class Trainer(Runtime):
     def __init__(self, initState, **kwargs):
         super().__init__(initState, **kwargs)
-        #self.universe = Universe()
         self.universe = self.head.universe
         self.rootNode = self.head
         self.terminal = None
 
-    def buildDatasetFromModel(self, model, depth=4, refining=True, fanOut=[5, 5, 5, 5, 4, 4, 4, 4], uncertainSec=15, exacity=5):
+    def buildDatasetFromModel(self, v_model, q_model, depth=4, refining=True, fanOut=[5, 5, 5, 5, 4, 4, 4, 4], uncertainSec=15, exacity=5):
         print('[*] Building Timeline')
-        term = self.linearPlay(model, calcDepth=depth, exacity=exacity)
+        term = self.linearPlay(v_model, q_model, calcDepth=depth, exacity=exacity)
         if refining:
             print('[*] Refining Timeline (exploring alternative endings)')
             cur = term
             for d in fanOut:
                 cur = cur.parent
+                if cur == None:
+                    break
                 cur.forceStrong(d)
                 print('.', end='', flush=True)
             print('')
@@ -164,9 +167,10 @@ class Trainer(Runtime):
             self.timelineExpandUncertain(term, uncertainSec)
         return term
 
-    def linearPlay(self, model, calcDepth=7, exacity=5, verbose=False, firstNRandom=2):
+    def linearPlay(self, v_model, q_model, calcDepth=7, exacity=5, verbose=False, firstNRandom=2):
         head = self.rootNode
-        self.universe.model = model
+        self.universe.v_model = v_model
+        self.universe.q_model = q_model
         self.spawnWorker()
         while head.getWinner() == None:
             if verbose:
@@ -183,7 +187,7 @@ class Trainer(Runtime):
                 firstNRandom -= 1
                 ind = int(random.random()*len(opts))
             else:
-                opts.sort(key=lambda x: x[1])
+                opts.sort(key=lambda x: x[1], reverse=True)
                 if exacity >= 10:
                     ind = 0
                 else:
@@ -236,31 +240,52 @@ class Trainer(Runtime):
         self.killWorker()
         print('')
 
-    def trainModel(self, model, lr=0.00005, cut=0.01, calcDepth=4, exacity=5, terms=None, batch=16):
+    def trainModel(self, v_model, q_model, lr=0.00005, cut=0.01, calcDepth=4, exacity=5, terms=None, batch=2):
         loss_func = nn.MSELoss()
-        optimizer = optim.Adam(model.parameters(), lr)
+        v_optimizer = optim.Adam(v_model.parameters(), lr)
+        q_optimizer = optim.Adam(q_model.parameters(), lr)
+        print('[*] Conditioning Brain')
         if terms == None:
             terms = []
             for i in range(batch):
                 terms.append(self.buildDatasetFromModel(
-                    model, depth=calcDepth, exacity=exacity))
-        print('[*] Conditioning Brain')
-        for r in range(64):
+                    v_model, q_model, depth=calcDepth, exacity=exacity))
+        for r in range(16):
             loss_sum = 0
             lLoss = 0
             zeroLen = 0
             for i, node in enumerate(self.timelineIter(terms)):
                 for p in range(self.rootNode.playersNum):
                     inp = node.state.getTensor(player=p)
-                    gol = torch.tensor(
+                    v = torch.tensor(
                         [node.getStrongFor(p)], dtype=torch.float)
-                    out = model(inp)
-                    loss = loss_func(out, gol)
-                    optimizer.zero_grad()
-                    loss.backward()
-                    optimizer.step()
-                    loss_sum += loss.item()
-                    if loss.item() == 0.0:
+                    qs = []
+                    q_preds = []
+                    q_loss = torch.Tensor([0])
+                    if node.childs:
+                        for child in node.childs:
+                            sa = child.lastAction.getTensor(node.state, player=p)
+                            q = child.getStrongFor(p)
+                            q_pred = q_model(sa)
+                            qs.append(q)
+                            q_preds.append(q_pred)
+                        qs = torch.Tensor(qs)
+                        q_target = torch.zeros_like(qs).scatter_(0, torch.argmax(qs).unsqueeze(0), 1)
+                        q_cur = torch.concat(q_preds)
+                        q_loss = loss_func(q_cur, q_target)
+                        q_optimizer.zero_grad()
+                        q_loss.backward()
+                        q_optimizer.step()
+
+                    v_pred = v_model(inp)
+                    v_loss = loss_func(v_pred, v)
+                    v_optimizer.zero_grad()
+                    v_loss.backward()
+                    v_optimizer.step()
+
+                    loss = v_loss.item() + q_loss.item()
+                    loss_sum += loss
+                    if v_loss.item() == 0.0:
                         zeroLen += 1
                 if zeroLen == 5:
                     break
@@ -270,31 +295,31 @@ class Trainer(Runtime):
             lLoss = loss_sum
         return loss_sum
 
-    def main(self, model=None, gens=1024, startGen=0):
+    def main(self, v_model=None, q_model=None, gens=1024, startGen=0):
         newModel = False
-        if model == None:
+        if v_model == None or q_model==None:
             print('[!] No brain found. Creating new one...')
             newModel = True
-            model = self.rootNode.state.getModel()
+            v_model, q_model = self.rootNode.state.getVModel(), self.rootNode.state.getQModel()
         self.universe.scoreProvider = ['neural', 'naive'][newModel]
-        model.train()
+        v_model.train(), q_model.train()
         for gen in range(startGen, startGen+gens):
             print('[#####] Gen '+str(gen)+' training:')
-            loss = self.trainModel(model, calcDepth=min(
+            loss = self.trainModel(v_model, q_model, calcDepth=min(
                 4, 3+int(gen/16)), exacity=int(gen/3+1), batch=4)
             print('[L] '+str(loss))
             self.universe.scoreProvider = 'neural'
-            self.saveModel(model, gen)
+            self.saveModel(v_model, q_model, gen)
 
     def trainFromTerm(self, term):
-        model, gen = self.loadModel()
+        v_model, q_model, gen = self.loadModel()
         self.universe.scoreProvider = 'neural'
-        self.trainModel(model, calcDepth=4, exacity=10, term=term)
-        self.saveModel(model)
+        self.trainModel(v_model, q_model, calcDepth=4, exacity=10, term=term)
+        self.saveModel(v_model, q_model)
 
     def train(self):
         if os.path.exists(self.getModelFileName()):
-            model, gen = self.loadModel()
-            self.main(model, startGen=gen+1)
+            v_model, q_model, gen = self.loadModel()
+            self.main(v_model, q_model, startGen=gen+1)
         else:
             self.main()

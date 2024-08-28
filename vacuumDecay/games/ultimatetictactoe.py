@@ -3,7 +3,7 @@ A lot of this code was stolen from Pulkit Maloo (https://github.com/pulkitmaloo/
 """
 import numpy as np
 import torch
-from troch import nn
+from torch import nn
 from PIL import Image, ImageDraw
 
 from collections import Counter
@@ -11,8 +11,11 @@ import itertools
 
 from vacuumDecay import State, Action, Runtime, NeuralRuntime, Trainer, choose, main
 
+class UTTTAction(Action):
+    def __init__(self, player, data):
+        super().__init__(player, data)
 
-class TTTState(State):
+class UTTTState(State):
     def __init__(self, curPlayer=0, generation=0, playersNum=2, board=None, lastMove=-1):
         if type(board) == type(None):
             board = "." * 81
@@ -48,7 +51,7 @@ class TTTState(State):
     def mutate(self, action):
         newBoard = self.board[:action.data] + ['O',
                                                'X'][self.curPlayer] + self.board[action.data+1:]
-        return TTTState(curPlayer=(self.curPlayer+1) % self.playersNum, playersNum=self.playersNum, board=newBoard, lastMove=action.data)
+        return UTTTState(curPlayer=(self.curPlayer+1) % self.playersNum, playersNum=self.playersNum, board=newBoard, lastMove=action.data)
 
     def box(self, x, y):
         return self.index(x, y) // 9
@@ -67,7 +70,7 @@ class TTTState(State):
     def getAvaibleActions(self):
         if self.last_move == -1:
             for i in range(9*9):
-                yield Action(self.curPlayer, i)
+                yield UTTTAction(self.curPlayer, i)
             return
 
         box_to_play = self.next_box(self.last_move)
@@ -82,19 +85,6 @@ class TTTState(State):
         for ind in possible_indices:
             if self.board[ind] == '.':
                 yield Action(self.curPlayer, ind)
-
-    # def getScoreFor(self, player):
-    #    p = ['O','X'][player]
-    #    sco = 5
-    #    for w in self.box_won:
-    #        if w==p:
-    #            sco += 1
-    #        elif w!='.':
-    #            sco -= 0.5
-    #    return 1/sco
-
-    # def getPriority(self, score, cascadeMem):
-    #    return -cascadeMem*1 + 100
 
     def checkWin(self):
         self.update_box_won()
@@ -147,11 +137,15 @@ class TTTState(State):
         return torch.tensor([self.symbToNum(b) for b in s])
 
     @classmethod
-    def getModel(cls, phase='default'):
-        return Model()
+    def getVModel(cls, phase='default'):
+        return TTTV()
+
+    @classmethod
+    def getQModel(cls, phase='default'):
+        return TTTQ()
 
 
-class Model(nn.Module):
+class TTTV(nn.Module):
     def __init__(self):
         super().__init__()
 
@@ -183,13 +177,6 @@ class Model(nn.Module):
             nn.Linear(self.chansPerSlot*9, self.chansComp),
             nn.ReLU(),
             nn.Linear(self.chansComp, 1),
-            #nn.Linear(9*8, 32),
-            # nn.ReLU(),
-            #nn.Linear(32, 8),
-            # nn.ReLU(),
-            #nn.Linear(16*9, 12),
-            # nn.ReLU(),
-            #nn.Linear(12, 1),
             nn.Sigmoid()
         )
 
@@ -202,5 +189,54 @@ class Model(nn.Module):
         y = self.out(x)
         return y
 
+class TTTQ(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.chansPerSmol = 24
+        self.chansPerSlot = 8
+        self.chansComp = 8
+
+        self.smol = nn.Sequential(
+            nn.Conv2d(
+                in_channels=2,
+                out_channels=self.chansPerSmol,
+                kernel_size=(3, 3),
+                stride=3,
+                padding=0,
+            ),
+            nn.ReLU()
+        )
+        self.comb = nn.Sequential(
+            nn.Conv1d(
+                in_channels=self.chansPerSmol,
+                out_channels=self.chansPerSlot,
+                kernel_size=1,
+                stride=1,
+                padding=0,
+            ),
+            nn.ReLU()
+        )
+        self.out = nn.Sequential(
+            nn.Linear(self.chansPerSlot*9*2, self.chansComp),
+            nn.ReLU(),
+            nn.Linear(self.chansComp, 4),
+            nn.ReLU(),
+            nn.Linear(4, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        a, b = x
+        a = torch.reshape(a, (1, 9, 9))
+        b = torch.reshape(b, (1, 9, 9))
+        x = torch.stack((a,b))
+        x = self.smol(x)
+        x = torch.reshape(x, (self.chansPerSmol, 9))
+        x = self.comb(x)
+        x = torch.reshape(x, (-1,))
+        y = self.out(x)
+        return y
+
 if __name__=="__main__":
-    main(TTTState)
+    main(UTTTState)
